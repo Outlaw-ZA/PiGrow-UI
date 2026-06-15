@@ -1,0 +1,57 @@
+// src/types/grow.ts
+
+export enum DeviceType {
+  LIGHT = 'LIGHT',
+  EXHAUST_FAN = 'EXHAUST_FAN',
+  INTAKE_FAN = 'INTAKE_FAN',
+  CIRCULATION_FAN = 'CIRCULATION_FAN',
+  WATER_PUMP = 'WATER_PUMP',
+  AIR_CONDITIONER = 'AIR_CONDITIONER',
+  HEATER = 'HEATER',
+  HUMIDIFIER = 'HUMIDIFIER',
+  DEHUMIDIFIER = 'DEHUMIDIFIER',
+  CO2_INJECTOR = 'CO2_INJECTOR',
+}
+
+export enum TriggerType {
+  SCHEDULE = 'SCHEDULE',
+  THRESHOLD = 'THRESHOLD',
+  ALWAYS_ON = 'ALWAYS_ON',
+  ALWAYS_OFF = 'ALWAYS_OFF',
+}
+
+export interface Controller {
+  id?: string
+  macAddress: string
+  ipAddress: string
+  name: string
+  status?: 'ONLINE' | 'OFFLINE' | 'ERROR'
+  devices?: Device[]
+}
+
+export interface Device {
+  id?: string
+  controllerId: string
+  name: string
+  type: DeviceType
+  pinNumber: number
+  mqttTopic: string
+  isActive: boolean
+}
+
+export interface GrowCycle {
+  id?: string
+  controllerId: string
+  name: string
+  isActive: boolean
+  phases?: GrowPhase[]
+}
+
+export interface GrowPhase {
+  id?: string
+  growCycleId?: string
+  name: string
+  order: number
+  durationDays: number
+  isActive: boolean
+}
