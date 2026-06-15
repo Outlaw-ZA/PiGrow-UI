@@ -4,7 +4,7 @@ import { ref } from 'vue'
 import axios from 'axios'
 import type { Controller, Device, GrowCycle } from '../types/grow'
 
-const API_BASE = 'http://localhost:4000/api' // Change to your backend URL
+const API_BASE = 'http://192.168.0.105:4000/api' // Change to your backend URL
 
 export const useGrowStore = defineStore('grow', () => {
   // Reactive App States
@@ -20,6 +20,7 @@ export const useGrowStore = defineStore('grow', () => {
         axios.get(`${API_BASE}/controllers`),
         axios.get(`${API_BASE}/grow-cycles`),
       ])
+      console.log({ resC, resG })
       controllers.value = resC.data
       growCycles.value = resG.data
     } catch (err) {

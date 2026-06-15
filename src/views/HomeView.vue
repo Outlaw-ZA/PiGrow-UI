@@ -23,7 +23,10 @@ onMounted(() => {
         margin-bottom: 2rem;
       "
     >
-      <h1 class="text-3xl font-bold">🌿 Real-time Facility Monitor</h1>
+      <!-- Explicitly override the color to a deep slate color (#0f172a) -->
+      <h1 style="font-size: 1.875rem; font-weight: 700; color: #0f172a; margin: 0">
+        🌿 Real-time Facility Monitor
+      </h1>
       <span
         style="
           background: #10b981;
@@ -46,28 +49,53 @@ onMounted(() => {
         margin-bottom: 3rem;
       "
     >
-      <div v-for="cycle in store.growCycles" :key="cycle.id">
-        <Card style="border-left: 5px solid #22c55e">
-          <template #title>📋 {{ cycle.name }}</template>
+      <div
+        v-for="cycle in store.growCycles"
+        :key="cycle.id"
+        @click="$router.push(`/grow/${cycle.id}`)"
+        style="cursor: pointer; transition: transform 0.15s ease-in-out"
+        class="hover-scale-card"
+      >
+        <Card style="border-left: 5px solid #22c55e; height: 100%">
+          <!-- Update the #title template slot with an explicit white color override -->
+          <template #title>
+            <span
+              style="
+                color: #ffffff;
+                font-weight: 700;
+                font-size: 1.25rem;
+                display: block;
+                margin-bottom: 0.25rem;
+              "
+            >
+              📋 {{ cycle.name }}
+            </span>
+          </template>
+
           <template #subtitle>
-            Operational Node Status:
-            <span :style="{ color: cycle.isActive ? '#22c55e' : '#64748b', fontWeight: 'bold' }">
-              {{ cycle.isActive ? 'RUNNING' : 'PAUSED' }}
+            <span :style="{ color: cycle.isActive ? '#22c55e' : '#94a3b8', fontWeight: 'bold' }">
+              {{ cycle.isActive ? '● RUNNING' : '○ PAUSED' }}
             </span>
           </template>
           <template #content>
-            <p style="color: #64748b; font-size: 0.9rem">Linked Controller ID:</p>
+            <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem">Linked Node IP:</p>
+            <!-- Backend Analogy: Safe lookup across local state stores -->
             <code
               style="
                 background: #f1f5f9;
                 padding: 0.2rem 0.4rem;
-                display: block;
                 border-radius: 4px;
-                word-break: break-all;
+                color: #334155;
               "
             >
-              {{ cycle.controllerId }}
+              {{
+                store.controllers.find((c) => c.id === cycle.controllerId)?.ipAddress ||
+                'Unassigned Host'
+              }}
             </code>
+            <div style="margin-top: 1rem; font-size: 0.85rem; color: #10b981; font-weight: 600">
+              Click to open monitoring panel →
+            </div>
           </template>
         </Card>
       </div>
@@ -98,3 +126,9 @@ onMounted(() => {
     </Card>
   </div>
 </template>
+
+<style scoped>
+.hover-scale-card:hover {
+  transform: translateY(-4px);
+}
+</style>

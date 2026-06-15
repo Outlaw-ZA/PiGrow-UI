@@ -2,6 +2,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from './views/HomeView.vue'
 import AdminView from './views/AdminView.vue'
+import GrowMonitorView from './views/GrowMonitorView.vue'
 
 // Controller Views
 import ControllerFormView from './views/admin/ControllerFormView.vue'
@@ -26,6 +27,12 @@ const router = createRouter({
     // Grow Lifecycle Subroutes
     { path: '/admin/grows/new', name: 'grow-create', component: GrowFormView },
     { path: '/admin/grows/edit/:id', name: 'grow-edit', component: GrowFormView, props: true },
+    {
+      path: '/grow/:id',
+      name: 'grow-monitor',
+      component: GrowMonitorView,
+      props: true, // Pass the :id parameter down into the component as a native prop
+    },
   ],
 })
 
