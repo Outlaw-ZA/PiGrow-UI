@@ -50,6 +50,22 @@ export const useGrowStore = defineStore('grow', () => {
     growCycles.value.push(res.data)
   }
 
+  // Add these function signatures inside your useGrowStore implementation block:
+
+  async function updateController(id: string, payload: any) {
+    const res = await axios.put(`${API_BASE}/controllers/${id}`, payload)
+    const idx = controllers.value.findIndex((c) => c.id === id)
+    if (idx !== -1) controllers.value[idx] = res.data
+  }
+
+  async function updateGrowCycle(id: string, payload: any) {
+    const res = await axios.put(`${API_BASE}/grow-cycles/${id}`, payload)
+    const idx = growCycles.value.findIndex((g) => g.id === id)
+    if (idx !== -1) growCycles.value[idx] = res.data
+  }
+
+  // Remember to return updateController and updateGrowCycle at the bottom!
+
   return {
     controllers,
     growCycles,
@@ -58,5 +74,7 @@ export const useGrowStore = defineStore('grow', () => {
     createController,
     createDevice,
     createGrowCycle,
+    updateController,
+    updateGrowCycle,
   }
 })
