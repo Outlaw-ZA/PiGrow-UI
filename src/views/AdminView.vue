@@ -14,6 +14,18 @@ const router = useRouter()
 onMounted(() => {
   store.fetchAll()
 })
+
+async function deleteController(id: string) {
+  if (confirm('Delete this controller and all its devices?')) {
+    await store.deleteController(id)
+  }
+}
+
+async function deleteGrowCycle(id: string) {
+  if (confirm('Delete this grow cycle and all associated data?')) {
+    await store.deleteGrowCycle(id)
+  }
+}
 </script>
 
 <template>
@@ -37,13 +49,21 @@ onMounted(() => {
           <Column field="macAddress" header="MAC Address"></Column>
           <Column header="Actions">
             <template #body="slotProps">
-              <Button
-                label="Update"
-                icon="pi pi-pencil"
-                severity="secondary"
-                size="small"
-                @click="router.push(`/admin/controllers/edit/${slotProps.data.id}`)"
-              />
+              <div style="display: flex; gap: 0.25rem">
+                <Button
+                  label="Edit"
+                  icon="pi pi-pencil"
+                  severity="secondary"
+                  size="small"
+                  @click="router.push(`/admin/controllers/edit/${slotProps.data.id}`)"
+                />
+                <Button
+                  icon="pi pi-trash"
+                  severity="danger"
+                  size="small"
+                  @click="deleteController(slotProps.data.id)"
+                />
+              </div>
             </template>
           </Column>
         </DataTable>
@@ -73,13 +93,21 @@ onMounted(() => {
           </Column>
           <Column header="Actions">
             <template #body="slotProps">
-              <Button
-                label="Update"
-                icon="pi pi-cog"
-                severity="secondary"
-                size="small"
-                @click="router.push(`/admin/grows/edit/${slotProps.data.id}`)"
-              />
+              <div style="display: flex; gap: 0.25rem">
+                <Button
+                  label="Edit"
+                  icon="pi pi-cog"
+                  severity="secondary"
+                  size="small"
+                  @click="router.push(`/admin/grows/edit/${slotProps.data.id}`)"
+                />
+                <Button
+                  icon="pi pi-trash"
+                  severity="danger"
+                  size="small"
+                  @click="deleteGrowCycle(slotProps.data.id)"
+                />
+              </div>
             </template>
           </Column>
         </DataTable>

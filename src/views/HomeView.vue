@@ -73,13 +73,24 @@ onMounted(() => {
           </template>
 
           <template #subtitle>
-            <span :style="{ color: cycle.isActive ? '#22c55e' : '#94a3b8', fontWeight: 'bold' }">
-              {{ cycle.isActive ? '● RUNNING' : '○ PAUSED' }}
-            </span>
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap">
+              <span :style="{ color: cycle.isActive ? '#22c55e' : '#94a3b8', fontWeight: 'bold' }">
+                {{ cycle.isActive ? '● RUNNING' : '○ PAUSED' }}
+              </span>
+              <span
+                v-if="cycle.controller"
+                :style="{
+                  color: cycle.controller.status === 'ONLINE' ? '#22c55e' : '#ef4444',
+                  fontSize: '0.75rem',
+                }"
+              >
+                {{ cycle.controller.status === 'ONLINE' ? '●' : '○' }}
+                {{ cycle.controller.name }}
+              </span>
+            </div>
           </template>
           <template #content>
             <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem">Linked Node IP:</p>
-            <!-- Backend Analogy: Safe lookup across local state stores -->
             <code
               style="
                 background: #f1f5f9;

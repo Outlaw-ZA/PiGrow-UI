@@ -1,18 +1,25 @@
-// src/stores/growStore.ts
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
-import type { Controller, Device, GrowCycle } from '../types/grow'
+import type {
+  Controller,
+  Device,
+  GrowCycle,
+  GrowCycleListItem,
+  GrowPhase,
+  DeviceConfig,
+  Telemetry,
+} from '../types/grow'
 
-const API_BASE = 'http://192.168.0.105:4000/api' // Change to your backend URL
+const API_BASE = 'http://192.168.0.105:4000/api'
 
 export const useGrowStore = defineStore('grow', () => {
-  // Reactive App States
   const controllers = ref<Controller[]>([])
-  const growCycles = ref<GrowCycle[]>([])
+  const growCycles = ref<GrowCycleListItem[]>([])
   const loading = ref(false)
 
-  // Fetch actions
+  // ==================== FETCH ALL ====================
+
   async function fetchAll() {
     loading.value = true
     try {
@@ -20,7 +27,6 @@ export const useGrowStore = defineStore('grow', () => {
         axios.get(`${API_BASE}/controllers`),
         axios.get(`${API_BASE}/grow-cycles`),
       ])
-      console.log({ resC, resG })
       controllers.value = resC.data
       growCycles.value = resG.data
     } catch (err) {
@@ -30,15 +36,46 @@ export const useGrowStore = defineStore('grow', () => {
     }
   }
 
-  // Create Operations
-  async function createController(payload: Controller) {
+  // ==================== CONTROLLERS ====================
+
+  async function createController(payload: Partial<Controller>) {
     const res = await axios.post(`${API_BASE}/controllers`, payload)
     controllers.value.push(res.data)
   }
 
-  async function createDevice(payload: Device) {
+  async function updateController(id: string, payload: Partial<Controller>) {
+    const res = await axios.put(`${API_BASE}/controllers/${id}`, payload)
+    const idx = controllers.value.findIndex((c) => c.id === id)
+    if (idx !== -1) controllers.value[idx] = res.data
+  }
+
+  async function deleteController(id: string) {
+    await axios.delete(`${API_BASE}/controllers/${id}`)
+    controllers.value = controllers.value.filter((c) => c.id !== id)
+  }
+
+  async function fetchController(id: string) {
+    const res = await axios.get(`${API_BASE}/controllers/${id}`)
+    const idx = controllers.value.findIndex((c) => c.id === id)
+    if (idx !== -1) {
+      controllers.value[idx] = res.data
+    }
+    return res.data as Controller
+  }
+
+  // ==================== DEVICES ====================
+
+  async function fetchDevices(controllerId: string) {
+    const res = await axios.get(`${API_BASE}/devices/controller/${controllerId}`)
+    const ctrl = controllers.value.find((c) => c.id === controllerId)
+    if (ctrl) {
+      ctrl.devices = res.data
+    }
+    return res.data as Device[]
+  }
+
+  async function createDevice(payload: Partial<Device>) {
     const res = await axios.post(`${API_BASE}/devices`, payload)
-    // Find local controller and append device locally
     const ctrl = controllers.value.find((c) => c.id === payload.controllerId)
     if (ctrl) {
       if (!ctrl.devices) ctrl.devices = []
@@ -46,26 +83,124 @@ export const useGrowStore = defineStore('grow', () => {
     }
   }
 
-  async function createGrowCycle(payload: GrowCycle) {
+  async function updateDevice(id: string, payload: Partial<Device>) {
+    const res = await axios.put(`${API_BASE}/devices/${id}`, payload)
+    for (const ctrl of controllers.value) {
+      const idx = ctrl.devices?.findIndex((d) => d.id === id)
+      if (idx !== undefined && idx !== -1) {
+        ctrl.devices![idx] = res.data
+        break
+      }
+    }
+  }
+
+  async function deleteDevice(id: string) {
+    await axios.delete(`${API_BASE}/devices/${id}`)
+    for (const ctrl of controllers.value) {
+      if (ctrl.devices) {
+        ctrl.devices = ctrl.devices.filter((d) => d.id !== id)
+      }
+    }
+  }
+
+  async function sendDeviceCommand(deviceId: string, action: 'ON' | 'OFF') {
+    await axios.post(`${API_BASE}/devices/${deviceId}/command`, { action })
+    for (const ctrl of controllers.value) {
+      const device = ctrl.devices?.find((d) => d.id === deviceId)
+      if (device) {
+        device.isActive = action === 'ON'
+        break
+      }
+    }
+  }
+
+  // ==================== GROW CYCLES ====================
+
+  async function createGrowCycle(payload: { name: string; controllerId: string; isActive?: boolean }) {
     const res = await axios.post(`${API_BASE}/grow-cycles`, payload)
     growCycles.value.push(res.data)
   }
 
-  // Add these function signatures inside your useGrowStore implementation block:
-
-  async function updateController(id: string, payload: any) {
-    const res = await axios.put(`${API_BASE}/controllers/${id}`, payload)
-    const idx = controllers.value.findIndex((c) => c.id === id)
-    if (idx !== -1) controllers.value[idx] = res.data
-  }
-
-  async function updateGrowCycle(id: string, payload: any) {
+  async function updateGrowCycle(id: string, payload: Partial<GrowCycle>) {
     const res = await axios.put(`${API_BASE}/grow-cycles/${id}`, payload)
     const idx = growCycles.value.findIndex((g) => g.id === id)
     if (idx !== -1) growCycles.value[idx] = res.data
   }
 
-  // Remember to return updateController and updateGrowCycle at the bottom!
+  async function deleteGrowCycle(id: string) {
+    await axios.delete(`${API_BASE}/grow-cycles/${id}`)
+    growCycles.value = growCycles.value.filter((g) => g.id !== id)
+  }
+
+  async function fetchGrowCycle(id: string) {
+    const res = await axios.get(`${API_BASE}/grow-cycles/${id}`)
+    const idx = growCycles.value.findIndex((g) => g.id === id)
+    if (idx !== -1) {
+      growCycles.value[idx] = res.data
+    }
+    return res.data as GrowCycle
+  }
+
+  // ==================== GROW PHASES ====================
+
+  async function fetchPhases(growCycleId: string) {
+    const res = await axios.get(`${API_BASE}/grow-phases/cycle/${growCycleId}`)
+    return res.data as GrowPhase[]
+  }
+
+  async function createGrowPhase(payload: Partial<GrowPhase>) {
+    const res = await axios.post(`${API_BASE}/grow-phases`, payload)
+    return res.data as GrowPhase
+  }
+
+  async function updateGrowPhase(id: string, payload: Partial<GrowPhase>) {
+    const res = await axios.put(`${API_BASE}/grow-phases/${id}`, payload)
+    return res.data as GrowPhase
+  }
+
+  async function deleteGrowPhase(id: string) {
+    await axios.delete(`${API_BASE}/grow-phases/${id}`)
+  }
+
+  async function activateGrowPhase(id: string) {
+    const res = await axios.patch(`${API_BASE}/grow-phases/${id}/activate`)
+    return res.data as GrowPhase
+  }
+
+  // ==================== DEVICE CONFIGS ====================
+
+  async function fetchDeviceConfigs(phaseId: string) {
+    const res = await axios.get(`${API_BASE}/device-configs/phase/${phaseId}`)
+    return res.data as DeviceConfig[]
+  }
+
+  async function createDeviceConfig(payload: Partial<DeviceConfig>) {
+    const res = await axios.post(`${API_BASE}/device-configs`, payload)
+    return res.data as DeviceConfig
+  }
+
+  async function updateDeviceConfig(id: string, payload: Partial<DeviceConfig>) {
+    const res = await axios.put(`${API_BASE}/device-configs/${id}`, payload)
+    return res.data as DeviceConfig
+  }
+
+  async function deleteDeviceConfig(id: string) {
+    await axios.delete(`${API_BASE}/device-configs/${id}`)
+  }
+
+  // ==================== TELEMETRY ====================
+
+  async function fetchTelemetry(growCycleId: string) {
+    const res = await axios.get(`${API_BASE}/telemetry/grow-cycle/${growCycleId}`)
+    return res.data as Telemetry[]
+  }
+
+  async function fetchLatestTelemetry(growCycleId: string) {
+    const res = await axios.get(`${API_BASE}/telemetry/grow-cycle/${growCycleId}/latest`)
+    return res.data as Telemetry[]
+  }
+
+  // ==================== EXPORTS ====================
 
   return {
     controllers,
@@ -73,9 +208,28 @@ export const useGrowStore = defineStore('grow', () => {
     loading,
     fetchAll,
     createController,
-    createDevice,
-    createGrowCycle,
     updateController,
+    deleteController,
+    fetchController,
+    fetchDevices,
+    createDevice,
+    updateDevice,
+    deleteDevice,
+    sendDeviceCommand,
+    createGrowCycle,
     updateGrowCycle,
+    deleteGrowCycle,
+    fetchGrowCycle,
+    fetchPhases,
+    createGrowPhase,
+    updateGrowPhase,
+    deleteGrowPhase,
+    activateGrowPhase,
+    fetchDeviceConfigs,
+    createDeviceConfig,
+    updateDeviceConfig,
+    deleteDeviceConfig,
+    fetchTelemetry,
+    fetchLatestTelemetry,
   }
 })
