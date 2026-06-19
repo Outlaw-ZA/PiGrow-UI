@@ -22,7 +22,7 @@ const isEditMode = computed(() => Boolean(controllerId.value))
 const form = ref({ ipAddress: '', macAddress: '', name: '' })
 
 const deviceTypeOptions = Object.values(DeviceType).map((t) => ({
-  label: t.replaceAll(/_/g, ' '),
+  label: t.replaceAll('_', ' '),
   value: t,
 }))
 
