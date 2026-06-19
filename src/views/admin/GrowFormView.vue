@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useGrowStore } from '../../stores/growStore'
 import type { GrowPhase } from '../../types/grow'
@@ -15,9 +15,9 @@ const route = useRoute()
 const router = useRouter()
 
 const growId = computed(() => route.params.id as string | undefined)
-const isEditMode = computed(() => !!growId.value)
+const isEditMode = computed(() => Boolean(growId.value))
 
-const form = ref({ controllerId: '', name: '', isActive: false })
+const form = ref({ controllerId: '', isActive: false, name: '' })
 const phases = ref<GrowPhase[]>([])
 const ready = ref(false)
 const saving = ref(false)
@@ -27,7 +27,7 @@ function formatDate(date: Date): string {
 }
 
 function recalculateDates() {
-  let cursor = new Date()
+  const cursor = new Date()
   cursor.setHours(0, 0, 0, 0)
   for (const phase of phases.value) {
     phase.startAt = formatDate(cursor)
@@ -36,21 +36,17 @@ function recalculateDates() {
   }
 }
 
-const controllerOptions = computed(() =>
-  store.controllers.filter((c) => c.id != null),
-)
+const controllerOptions = computed(() => store.controllers.filter((c) => c.id != null))
 
-const totalCycleDays = computed(() =>
-  phases.value.reduce((sum, p) => sum + p.durationDays, 0),
-)
+const totalCycleDays = computed(() => phases.value.reduce((sum, p) => sum + p.durationDays, 0))
 
 function getDefaultPhases(): GrowPhase[] {
   return [
-    { name: 'Germination', order: 1, durationDays: 7, isActive: false, startAt: null, endAt: null },
-    { name: 'Seedling', order: 2, durationDays: 14, isActive: false, startAt: null, endAt: null },
-    { name: 'Vegetative', order: 3, durationDays: 28, isActive: false, startAt: null, endAt: null },
-    { name: 'Flowering', order: 4, durationDays: 56, isActive: false, startAt: null, endAt: null },
-    { name: 'Flush', order: 5, durationDays: 14, isActive: false, startAt: null, endAt: null },
+    { durationDays: 7, endAt: null, isActive: false, name: 'Germination', order: 1, startAt: null },
+    { durationDays: 14, endAt: null, isActive: false, name: 'Seedling', order: 2, startAt: null },
+    { durationDays: 28, endAt: null, isActive: false, name: 'Vegetative', order: 3, startAt: null },
+    { durationDays: 56, endAt: null, isActive: false, name: 'Flowering', order: 4, startAt: null },
+    { durationDays: 14, endAt: null, isActive: false, name: 'Flush', order: 5, startAt: null },
   ]
 }
 
@@ -69,8 +65,8 @@ onMounted(async () => {
       phases.value = getDefaultPhases()
       recalculateDates()
     }
-  } catch (err) {
-    console.error('Failed to load form data', err)
+  } catch (error) {
+    console.error('Failed to load form data', error)
   } finally {
     ready.value = true
   }
@@ -86,23 +82,23 @@ async function loadExistingCycle(id: string) {
 }
 
 function addPhase() {
-  const nextOrder = phases.value.length > 0
-    ? Math.max(...phases.value.map((p) => p.order)) + 1
-    : 1
+  const nextOrder = phases.value.length > 0 ? Math.max(...phases.value.map((p) => p.order)) + 1 : 1
   phases.value.push({
+    durationDays: 7,
+    endAt: null,
+    isActive: false,
     name: '',
     order: nextOrder,
-    durationDays: 7,
-    isActive: false,
     startAt: null,
-    endAt: null,
   })
   recalculateDates()
 }
 
 async function removePhase(index: number) {
   const phase = phases.value[index]
-  if (!phase) return
+  if (!phase) {
+    return
+  }
   if (phase.id) {
     await store.deleteGrowPhase(phase.id)
   }
@@ -114,10 +110,10 @@ async function removePhase(index: number) {
 async function savePhase(phase: GrowPhase): Promise<GrowPhase | null> {
   if (phase.id) {
     return await store.updateGrowPhase(phase.id, {
-      name: phase.name,
-      order: phase.order,
       durationDays: phase.durationDays,
       isActive: phase.isActive,
+      name: phase.name,
+      order: phase.order,
     })
   }
   return null
@@ -132,9 +128,9 @@ const handleSave = async () => {
   try {
     if (isEditMode.value && growId.value) {
       await store.updateGrowCycle(growId.value, {
-        name: form.value.name,
         controllerId: form.value.controllerId,
         isActive: form.value.isActive,
+        name: form.value.name,
       })
       for (const phase of phases.value) {
         await savePhase(phase)
@@ -143,13 +139,13 @@ const handleSave = async () => {
     } else {
       await store.createGrowCycle({
         controllerId: form.value.controllerId,
-        name: form.value.name,
         isActive: form.value.isActive,
+        name: form.value.name,
       })
       router.push('/admin')
     }
-  } catch (err) {
-    console.error('Failed to save', err)
+  } catch (error) {
+    console.error('Failed to save', error)
   } finally {
     saving.value = false
   }
@@ -157,49 +153,47 @@ const handleSave = async () => {
 </script>
 
 <template>
-  <div v-if="ready" style="max-width: 720px; margin: 0 auto">
+  <div v-if="ready" class="form-page">
     <Card>
       <template #title>
-        <span style="color: #ffffff; font-weight: 700">
-          {{ isEditMode ? 'Adjust Grow Lifecycle Plan' : 'Schedule New Botanical Run' }}
-        </span>
+        {{ isEditMode ? 'Adjust Grow Lifecycle Plan' : 'Schedule New Botanical Run' }}
       </template>
       <template #content>
-        <div style="display: flex; flex-direction: column; gap: 1.5rem">
-          <div>
-            <label style="display: block; margin-bottom: 0.5rem; color: #cbd5e1"
-              >Assigned Controller Infrastructure Host</label
-            >
+        <div class="form-stack">
+          <div class="field">
+            <label for="grow-controller" class="field-label">
+              Assigned Controller Infrastructure Host
+            </label>
             <Select
+              id="grow-controller"
               v-model="form.controllerId"
               :options="controllerOptions"
               optionLabel="name"
               optionValue="id"
               placeholder="Select Pi Host Room"
-              style="width: 100%"
+              class="full-width"
               show-clear
             />
           </div>
-          <div>
-            <label style="display: block; margin-bottom: 0.5rem; color: #cbd5e1"
-              >Grow Batch Track Name</label
-            >
+          <div class="field">
+            <label for="grow-name" class="field-label">Grow Batch Track Name</label>
             <InputText
+              id="grow-name"
               v-model="form.name"
               placeholder="Run #5 - White Widow Pheno"
-              style="width: 100%"
+              class="full-width"
             />
           </div>
-          <div style="display: flex; align-items: center; gap: 1rem">
-            <label style="color: #cbd5e1">Set Target Execution State Active</label>
-            <ToggleSwitch v-model="form.isActive" />
+          <div class="switch-row">
+            <ToggleSwitch v-model="form.isActive" inputId="grow-active" />
+            <label for="grow-active" class="field-label-inline">
+              Set Target Execution State Active
+            </label>
           </div>
 
-          <div v-if="isEditMode" style="border-top: 1px solid #334155; padding-top: 1.5rem">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem">
-              <h3 style="margin: 0; color: #ffffff; font-weight: 700; font-size: 1.1rem">
-                Grow Phases
-              </h3>
+          <div v-if="isEditMode" class="phases-section">
+            <div class="phases-header">
+              <h3 class="phases-title">Grow Phases</h3>
               <Button
                 label="Add Phase"
                 icon="pi pi-plus"
@@ -209,102 +203,63 @@ const handleSave = async () => {
               />
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 1rem">
-              <div
-                v-for="(phase, idx) in phases"
-                :key="phase.id || idx"
-                style="
-                  background: #1e293b;
-                  border: 1px solid #334155;
-                  border-radius: 8px;
-                  padding: 1rem;
-                  display: flex;
-                  flex-direction: column;
-                  gap: 0.75rem;
-                "
-              >
-                <div style="display: flex; align-items: center; justify-content: space-between">
-                  <span
-                    style="
-                      background: #3b82f6;
-                      color: #ffffff;
-                      border-radius: 50%;
-                      width: 28px;
-                      height: 28px;
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      font-size: 0.75rem;
-                      font-weight: 700;
-                    "
-                  >
-                    {{ phase.order }}
-                  </span>
+            <div class="phases-list">
+              <div v-for="(phase, idx) in phases" :key="phase.id || idx" class="phase-card">
+                <div class="phase-card-header">
+                  <span class="phase-order-badge">{{ phase.order }}</span>
                   <Button
                     icon="pi pi-trash"
                     severity="danger"
                     text
                     size="small"
+                    aria-label="Remove phase"
                     @click="removePhase(idx)"
                   />
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 100px; gap: 0.75rem">
-                  <div>
-                    <label style="display: block; margin-bottom: 0.25rem; font-size: 0.75rem; color: #94a3b8"
-                      >Phase Name</label
-                    >
-                    <InputText v-model="phase.name" placeholder="e.g. Vegetative" style="width: 100%" />
+                <div class="phase-fields">
+                  <div class="field">
+                    <label :for="`phase-name-${idx}`" class="field-label-sm">Phase Name</label>
+                    <InputText
+                      :id="`phase-name-${idx}`"
+                      v-model="phase.name"
+                      placeholder="e.g. Vegetative"
+                      class="full-width"
+                    />
                   </div>
-                  <div style="min-width: 0">
-                    <label style="display: block; margin-bottom: 0.25rem; font-size: 0.75rem; color: #94a3b8"
-                      >Duration (days)</label
-                    >
-                    <InputNumber v-model="phase.durationDays" :min="1" :inputStyle="{ width: '100%' }" />
+                  <div class="field field-duration">
+                    <label :for="`phase-duration-${idx}`" class="field-label-sm">
+                      Duration (days)
+                    </label>
+                    <InputNumber
+                      :inputId="`phase-duration-${idx}`"
+                      v-model="phase.durationDays"
+                      :min="1"
+                    />
                   </div>
                 </div>
 
-                <div
-                  v-if="phase.startAt && phase.endAt"
-                  style="
-                    display: flex;
-                    gap: 1rem;
-                    font-size: 0.8rem;
-                    color: #94a3b8;
-                    background: #0f172a;
-                    border-radius: 6px;
-                    padding: 0.5rem 0.75rem;
-                  "
-                >
+                <div v-if="phase.startAt && phase.endAt" class="date-range">
                   <span>
-                    <strong style="color: #cbd5e1">Start:</strong> {{ phase.startAt }}
+                    <strong>Start:</strong>
+                    {{ phase.startAt }}
                   </span>
-                  <span style="color: #475569">&rarr;</span>
+                  <span class="date-separator">→</span>
                   <span>
-                    <strong style="color: #cbd5e1">End:</strong> {{ phase.endAt }}
+                    <strong>End:</strong>
+                    {{ phase.endAt }}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div
-              v-if="phases.length > 0"
-              style="
-                margin-top: 1rem;
-                padding: 0.75rem 1rem;
-                background: #0f172a;
-                border-radius: 8px;
-                display: flex;
-                justify-content: space-between;
-                font-size: 0.85rem;
-              "
-            >
-              <span style="color: #94a3b8">Total Cycle Duration</span>
-              <span style="color: #ffffff; font-weight: 700">{{ totalCycleDays }} days</span>
+            <div v-if="phases.length > 0" class="total-summary">
+              <span class="total-label">Total Cycle Duration</span>
+              <span class="total-value">{{ totalCycleDays }} days</span>
             </div>
           </div>
 
-          <div style="display: flex; gap: 1rem; margin-top: 0.5rem">
+          <div class="form-actions">
             <Button
               :label="isEditMode ? 'Commit Changes' : 'Initialize Batch'"
               severity="success"
@@ -318,3 +273,183 @@ const handleSave = async () => {
     </Card>
   </div>
 </template>
+
+<style scoped>
+.form-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-label {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.field-label-sm {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-weight: 500;
+}
+
+.field-label-inline {
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.phases-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.phases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.phases-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  font-size: var(--text-xl);
+}
+
+.phases-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.phase-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--duration-normal) var(--ease-default);
+}
+
+.phase-card:hover {
+  border-color: var(--color-bg-muted);
+}
+
+.phase-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phase-order-badge {
+  background: var(--color-info);
+  color: #ffffff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+}
+
+.phase-fields {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: var(--space-3);
+}
+
+.field-duration {
+  min-width: 0;
+}
+
+.date-range {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  background: var(--color-bg-base);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+}
+
+.date-range strong {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.date-separator {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.total-summary {
+  margin-top: var(--space-2);
+  padding: 0.75rem var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-md);
+}
+
+.total-label {
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.total-value {
+  color: var(--color-accent);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+</style>

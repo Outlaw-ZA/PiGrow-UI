@@ -7,6 +7,7 @@ import Card from 'primevue/card'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import Tag from 'primevue/tag'
 import ToggleSwitch from 'primevue/toggleswitch'
 
 const route = useRoute()
@@ -15,39 +16,42 @@ const store = useGrowStore()
 
 const cycleId = computed(() => route.params.id as string)
 
-const currentCycle = computed(() => {
-  return store.growCycles.find((g) => g.id === cycleId.value) as any
-})
+const currentCycle = computed(() => store.growCycles.find((g) => g.id === cycleId.value) as any)
 
 const linkedController = computed(() => {
-  return currentCycle.value?.controller || null
+  const cycle = currentCycle.value
+  if (!cycle) {
+    return null
+  }
+  return store.controllers.find((c) => c.id === cycle.controllerId) || cycle.controller || null
 })
 
 const sortedPhases = computed(() => {
   const phases = currentCycle.value?.phases
-  if (!phases) return []
-  return [...phases].sort((a: GrowPhase, b: GrowPhase) => a.order - b.order)
+  if (!phases) {
+    return []
+  }
+  return [...phases].toSorted((a: GrowPhase, b: GrowPhase) => a.order - b.order)
 })
 
-const totalDurationDays = computed(() => {
-  return sortedPhases.value.reduce((sum: number, p: GrowPhase) => sum + p.durationDays, 0)
-})
+const totalDurationDays = computed(() =>
+  sortedPhases.value.reduce((sum: number, p: GrowPhase) => sum + p.durationDays, 0),
+)
 
-const activePhaseIndex = computed(() => {
-  return sortedPhases.value.findIndex((p: GrowPhase) => p.isActive)
-})
+const activePhaseIndex = computed(() => sortedPhases.value.findIndex((p: GrowPhase) => p.isActive))
 
 const cycleProgressPercent = computed(() => {
-  if (sortedPhases.value.length === 0) return 0
+  if (sortedPhases.value.length === 0) {
+    return 0
+  }
   const idx = activePhaseIndex.value
-  if (idx === -1) return 0
+  if (idx === -1) {
+    return 0
+  }
   const completedDays = sortedPhases.value
     .slice(0, idx)
     .reduce((sum: number, p: GrowPhase) => sum + p.durationDays, 0)
-  return Math.min(
-    Math.round((completedDays / totalDurationDays.value) * 100),
-    100,
-  )
+  return Math.min(Math.round((completedDays / totalDurationDays.value) * 100), 100)
 })
 
 const deviceToggles = reactive<Record<string, boolean>>({})
@@ -63,7 +67,7 @@ watch(
       }
     }
   },
-  { immediate: true, deep: true },
+  { deep: true, immediate: true },
 )
 
 async function onToggle(deviceId: string, checked: boolean) {
@@ -77,86 +81,96 @@ onMounted(async () => {
     if (cycle?.controller) {
       const idx = store.controllers.findIndex((c) => c.id === cycle.controllerId)
       if (idx !== -1) {
-        store.controllers[idx] = cycle.controller
+        store.controllers[idx] = { ...store.controllers[idx], ...cycle.controller }
       } else {
         store.controllers.push(cycle.controller)
       }
     }
+    if (cycle?.controllerId) {
+      const devices = await store.fetchDevices(cycle.controllerId)
+      const ctrl = store.controllers.find((c) => c.id === cycle.controllerId)
+      if (ctrl) {
+        ctrl.devices = devices
+      }
+      if (currentCycle.value?.controller) {
+        currentCycle.value.controller.devices = devices
+      }
+    }
   }
 })
+
+function statusSeverity(status?: string) {
+  return status === 'ONLINE' ? 'success' : 'danger'
+}
 </script>
 
 <template>
-  <div v-if="currentCycle" style="display: flex; flex-direction: column; gap: 2rem">
-    <div style="display: flex; align-items: center; gap: 1.5rem">
-      <Button icon="pi pi-arrow-left" severity="secondary" rounded @click="router.push('/')" />
+  <div v-if="currentCycle" class="monitor-page">
+    <div class="back-row">
+      <Button
+        icon="pi pi-arrow-left"
+        severity="secondary"
+        text
+        rounded
+        size="small"
+        aria-label="Back"
+        @click="router.push('/')"
+      />
       <div>
-        <h1 style="font-size: 1.875rem; font-weight: 700; color: #0f172a; margin: 0">
-          {{ currentCycle.name }}
-        </h1>
-        <p style="color: #64748b; margin: 0.25rem 0 0 0">System Run Monitoring Dashboard</p>
+        <h1 class="page-title">{{ currentCycle.name }}</h1>
+        <p class="page-subtitle">System run monitoring dashboard</p>
       </div>
     </div>
 
-    <div
-      style="
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 1.5rem;
-      "
-    >
+    <div class="meta-grid">
       <Card>
-        <template #title><span style="color: #ffffff; font-weight: 700">Controller Hub Metadata</span></template>
+        <template #title>Controller</template>
         <template #content>
-          <div v-if="linkedController" style="display: flex; flex-direction: column; gap: 0.75rem">
-            <div><strong>Host Identifier Name:</strong> {{ linkedController.name }}</div>
-            <div>
-              <strong>Target LAN Address:</strong> <code>{{ linkedController.ipAddress }}</code>
+          <div v-if="linkedController" class="meta-list">
+            <div class="meta-row">
+              <span class="meta-label">Name</span>
+              <span class="meta-value">{{ linkedController.name }}</span>
             </div>
-            <div>
-              <strong>MAC Signature:</strong> <code>{{ linkedController.macAddress }}</code>
+            <div class="meta-row">
+              <span class="meta-label">IP Address</span>
+              <code class="meta-code">{{ linkedController.ipAddress }}</code>
             </div>
-            <div>
-              <strong>Current Connection:</strong>
-              <span
-                :style="{
-                  color: linkedController.status === 'ONLINE' ? '#22c55e' : '#ef4444',
-                  fontWeight: 'bold',
-                }"
-              >
-                ● {{ linkedController.status || 'OFFLINE' }}
-              </span>
+            <div class="meta-row">
+              <span class="meta-label">MAC Address</span>
+              <code class="meta-code">{{ linkedController.macAddress }}</code>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">Status</span>
+              <Tag
+                :value="linkedController.status || 'OFFLINE'"
+                :severity="statusSeverity(linkedController.status)"
+                rounded
+              />
             </div>
           </div>
-          <div v-else style="color: #ef4444">Warning: Infrastructure linkage mapping error.</div>
+          <div v-else class="empty-state error">Controller linkage not configured.</div>
         </template>
       </Card>
 
       <Card>
-        <template #title><span style="color: #ffffff; font-weight: 700">Execution Plan Status</span></template>
+        <template #title>Cycle</template>
         <template #content>
-          <div style="display: flex; flex-direction: column; gap: 0.75rem">
-            <div>
-              <strong>Logical Record UUID:</strong>
-              <span style="font-size: 0.85rem; color: #64748b">{{ currentCycle.id }}</span>
+          <div class="meta-list">
+            <div class="meta-row">
+              <span class="meta-label">ID</span>
+              <span class="meta-value mono">{{ currentCycle.id }}</span>
             </div>
-            <div>
-              <strong>Active Operational Toggle:</strong>
-              <span
-                :style="{
-                  background: currentCycle.isActive ? '#ecfdf5' : '#f1f5f9',
-                  color: currentCycle.isActive ? '#065f46' : '#475569',
-                  padding: '0.25rem 0.5rem',
-                  borderRadius: '4px',
-                  fontWeight: '600',
-                }"
-              >
-                {{ currentCycle.isActive ? 'RUNNING CYCLE' : 'STANDBY IDLE' }}
-              </span>
+            <div class="meta-row">
+              <span class="meta-label">State</span>
+              <Tag
+                :value="currentCycle.isActive ? 'Running' : 'Idle'"
+                :severity="currentCycle.isActive ? 'success' : 'secondary'"
+                rounded
+              />
             </div>
-            <div>
-              <strong>Mapped Active Hardware Devices:</strong>
-              {{ linkedController?.devices?.length || 0 }} Attached Peripherals
+            <div class="meta-row">
+              <span class="meta-label">Devices</span>
+              <span class="meta-value">{{ linkedController?.devices?.length || 0 }} attached</span>
             </div>
           </div>
         </template>
@@ -164,243 +178,416 @@ onMounted(async () => {
     </div>
 
     <Card>
-      <template #title><span style="color: #ffffff; font-weight: 700">Grow Phases</span></template>
+      <template #title>Phases</template>
       <template #content>
-        <div v-if="sortedPhases.length">
-          <div
-            style="
-              display: flex;
-              align-items: flex-start;
-              justify-content: space-between;
-              position: relative;
-              padding: 1rem 0;
-            "
-          >
-            <div
-              style="
-                position: absolute;
-                top: calc(1rem + 16px);
-                left: 18px;
-                right: 18px;
-                height: 4px;
-                background: #e2e8f0;
-                border-radius: 2px;
-                z-index: 0;
-              "
-            >
-              <div
-                style="
-                  height: 100%;
-                  background: linear-gradient(90deg, #22c55e, #3b82f6);
-                  border-radius: 2px;
-                  transition: width 0.5s ease;
-                "
-                :style="{ width: cycleProgressPercent + '%' }"
-              ></div>
+        <div v-if="sortedPhases.length" class="phases-wrapper">
+          <div class="phase-track">
+            <div class="phase-line">
+              <div class="phase-line-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
             </div>
-
-            <div
-              v-for="(phase, idx) in sortedPhases"
-              :key="phase.id || idx"
-              style="
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                flex: 1;
-                position: relative;
-                z-index: 1;
-              "
-            >
+            <div v-for="(phase, idx) in sortedPhases" :key="phase.id || idx" class="phase-step">
               <div
-                style="
-                  width: 36px;
-                  height: 36px;
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  font-size: 0.8rem;
-                  font-weight: 700;
-                  transition: all 0.3s ease;
-                "
-                :style="{
-                  background: idx < activePhaseIndex ? '#22c55e' : idx === activePhaseIndex ? '#3b82f6' : '#e2e8f0',
-                  color: idx <= activePhaseIndex ? '#ffffff' : '#94a3b8',
-                  boxShadow: idx === activePhaseIndex ? '0 0 0 4px rgba(59, 130, 246, 0.25)' : 'none',
+                class="phase-dot"
+                :class="{
+                  done: idx < activePhaseIndex,
+                  active: idx === activePhaseIndex,
+                  pending: idx > activePhaseIndex,
                 }"
               >
                 {{ idx + 1 }}
               </div>
-              <div
-                style="
-                  margin-top: 0.5rem;
-                  text-align: center;
-                  font-size: 0.8rem;
-                  font-weight: 600;
-                  max-width: 100px;
-                "
-                :style="{ color: idx === activePhaseIndex ? '#3b82f6' : '#64748b' }"
-              >
+              <div class="phase-name" :class="{ active: idx === activePhaseIndex }">
                 {{ phase.name }}
               </div>
-              <div style="margin-top: 0.25rem; font-size: 0.7rem; color: #94a3b8">
+              <div class="phase-duration">
                 {{ phase.durationDays }} day{{ phase.durationDays !== 1 ? 's' : '' }}
               </div>
             </div>
           </div>
 
-          <div style="margin-top: 1rem">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem">
-              <span style="font-size: 0.75rem; color: #94a3b8">Overall Progress</span>
-              <span style="font-size: 0.75rem; font-weight: 600; color: #64748b">
-                {{ cycleProgressPercent }}%
-              </span>
+          <div class="progress-block">
+            <div class="progress-header">
+              <span class="progress-label">Overall Progress</span>
+              <span class="progress-value">{{ cycleProgressPercent }}%</span>
             </div>
-            <div
-              style="
-                width: 100%;
-                height: 6px;
-                background: #e2e8f0;
-                border-radius: 3px;
-                overflow: hidden;
-              "
-            >
-              <div
-                style="
-                  height: 100%;
-                  background: linear-gradient(90deg, #22c55e, #3b82f6);
-                  border-radius: 3px;
-                  transition: width 0.5s ease;
-                "
-                :style="{ width: cycleProgressPercent + '%' }"
-              ></div>
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 0.25rem">
-              <span style="font-size: 0.7rem; color: #94a3b8">0 days</span>
-              <span style="font-size: 0.7rem; color: #94a3b8">{{ totalDurationDays }} days</span>
+            <div class="progress-footer">
+              <span>0 days</span>
+              <span>{{ totalDurationDays }} days</span>
             </div>
           </div>
         </div>
-        <div v-else style="text-align: center; color: #64748b; padding: 1rem 0">
-          No phases configured for this grow cycle.
-        </div>
+        <div v-else class="empty-state">No phases configured for this grow cycle.</div>
       </template>
     </Card>
 
     <Card>
-      <template #title><span style="color: #ffffff; font-weight: 700">Devices</span></template>
+      <template #title>Devices</template>
       <template #content>
-        <div
-          v-if="linkedController?.devices?.length"
-          style="
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-          "
-        >
+        <div v-if="linkedController?.devices?.length" class="device-grid">
           <div
             v-for="device in linkedController.devices"
             :key="device.id"
-            style="
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
-              border-radius: 12px;
-              padding: 0.75rem 1.25rem;
-              min-width: 200px;
-              flex: 1;
-              max-width: 280px;
-              transition: all 0.2s ease;
-            "
-            :style="{
-              borderColor: deviceToggles[device.id!] ? '#86efac' : '#e2e8f0',
-              background: deviceToggles[device.id!] ? '#f0fdf4' : '#f8fafc',
-            }"
+            class="device-tile"
+            :class="{ active: deviceToggles[device.id!] }"
           >
-            <span
-              style="
-                font-size: 0.8rem;
-                font-weight: 600;
-                color: #334155;
-                flex: 1;
-                line-height: 1.2;
-              "
-            >
-              {{ device.name }}
-            </span>
+            <span class="device-name">{{ device.name }}</span>
             <ToggleSwitch
               :modelValue="deviceToggles[device.id!]"
               @update:modelValue="(val: boolean) => onToggle(device.id!, val)"
             />
           </div>
         </div>
-        <div v-else style="text-align: center; color: #64748b; padding: 1rem 0">
-          No devices configured for this controller.
-        </div>
+        <div v-else class="empty-state">No devices configured for this controller.</div>
       </template>
     </Card>
 
     <Card>
-      <template #title>
-        <span style="color: #ffffff; font-weight: 700"
-          >Physical Hardware Relays Mapping Matrix (`Devices` Layer)</span
-        >
-      </template>
+      <template #title>Device Map</template>
       <template #content>
         <DataTable
           :value="linkedController?.devices || []"
-          responsiveLayout="scroll"
-          placeholder="No physical channels configured for this controller host environment yet."
+          size="small"
+          paginator
+          :rows="10"
+          :rowsPerPageOptions="[10, 20, 50]"
         >
           <template #empty>
-            <div style="padding: 1.5rem; text-align: center; color: #64748b">
-              No hardware devices map configurations discovered for this control node. Visit the
-              administration panel to assign devices.
+            <div class="empty-state">
+              No devices configured. Visit administration to assign devices.
             </div>
           </template>
-          <Column field="name" header="Device Peripheral Label" style="font-weight: 600"></Column>
-          <Column field="type" header="Device Framework Class"></Column>
-          <Column field="pinNumber" header="Physical GPIO / Relay Pin">
+          <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
+          <Column field="type" header="Type" sortable>
             <template #body="slotProps">
-              <span
-                style="
-                  background: #f1f5f9;
-                  padding: 0.2rem 0.5rem;
-                  border-radius: 4px;
-                  font-family: monospace;
-                "
-              >
-                Pin {{ slotProps.data.pinNumber }}
-              </span>
+              <span class="type-pill">{{ slotProps.data.type.replace(/_/g, ' ') }}</span>
             </template>
           </Column>
-          <Column field="mqttTopic" header="Control Bus Target Topic">
+          <Column field="pinNumber" header="GPIO Pin" sortable>
             <template #body="slotProps">
-              <code style="color: #0284c7">{{ slotProps.data.mqttTopic }}</code>
+              <code class="meta-code">{{ slotProps.data.pinNumber }}</code>
             </template>
           </Column>
-          <Column header="Power Signal Switch">
+          <Column field="mqttTopic" header="MQTT Topic" sortable>
             <template #body="slotProps">
-              <span
-                :style="{
-                  color: slotProps.data.isActive ? '#22c55e' : '#64748b',
-                  fontWeight: 'bold',
-                }"
-              >
-                {{ slotProps.data.isActive ? '⚡ LINK ARMED' : '⚪ SYSTEM DISARMED' }}
-              </span>
+              <code class="meta-code">{{ slotProps.data.mqttTopic }}</code>
+            </template>
+          </Column>
+          <Column header="State" sortable>
+            <template #body="slotProps">
+              <Tag
+                :value="slotProps.data.isActive ? 'Armed' : 'Disarmed'"
+                :severity="slotProps.data.isActive ? 'success' : 'secondary'"
+                rounded
+              />
             </template>
           </Column>
         </DataTable>
       </template>
     </Card>
   </div>
-  <div v-else style="text-align: center; padding: 3rem">
-    <p style="color: #ef4444; font-weight: bold">
-      Error 404: Grow Plan Profile Context Unresolved.
-    </p>
-    <Button label="Return to Facility Dashboard" class="p-button-text" @click="router.push('/')" />
+
+  <div v-else class="not-found">
+    <p class="error">Grow cycle not found.</p>
+    <Button label="Return to dashboard" text @click="router.push('/')" />
   </div>
 </template>
+
+<style scoped>
+.monitor-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.back-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.page-title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: var(--tracking-tight);
+}
+
+.page-subtitle {
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  margin: 0.125rem 0 0 0;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+.meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-md);
+}
+
+.meta-label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.meta-value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.meta-value.mono {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.meta-code {
+  background: var(--color-code-bg);
+  padding: 0.1875rem 0.4375rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-code-text);
+  font-size: var(--text-base);
+  border: 1px solid var(--color-border);
+}
+
+.type-pill {
+  text-transform: capitalize;
+  padding: 0.1875rem 0.5rem;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--space-6) 0;
+  font-size: var(--text-md);
+}
+
+.empty-state.error {
+  color: var(--color-danger);
+}
+
+.phases-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.phase-track {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-4) 0;
+}
+
+.phase-line {
+  position: absolute;
+  top: calc(1rem + 16px);
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  background: var(--color-track-bg);
+  z-index: 0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.phase-line-fill {
+  height: 100%;
+  background: var(--color-track-fill);
+  transition: width var(--duration-slow) var(--ease-default);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.phase-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.phase-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  background: var(--color-bg-base);
+  border: 2px solid var(--color-phase-pending-border);
+  color: var(--color-phase-pending-text);
+  transition: all var(--duration-slow) var(--ease-default);
+}
+
+.phase-dot.done {
+  background: var(--color-phase-done);
+  border-color: var(--color-phase-done);
+  color: var(--color-phase-done-text);
+}
+
+.phase-dot.active {
+  background: var(--color-phase-active);
+  border-color: var(--color-phase-active);
+  color: var(--color-phase-done-text);
+  box-shadow:
+    0 0 0 4px var(--color-accent-glow),
+    0 0 16px var(--color-accent-glow);
+  animation: pulse 2.4s var(--ease-default) infinite;
+}
+
+.phase-name {
+  margin-top: var(--space-2);
+  text-align: center;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  max-width: 100px;
+  transition: color var(--duration-normal) var(--ease-default);
+}
+
+.phase-name.active {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.phase-duration {
+  margin-top: 0.1875rem;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  font-weight: 500;
+}
+
+.progress-value {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--color-track-bg);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-track-fill);
+  border-radius: var(--radius-sm);
+  transition: width var(--duration-slow) var(--ease-default);
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.progress-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.device-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.device-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.625rem var(--space-4);
+  min-width: 200px;
+  flex: 1;
+  max-width: 280px;
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.device-tile:hover {
+  border-color: var(--color-bg-muted);
+  background: var(--color-bg-hover);
+}
+
+.device-tile.active {
+  border-color: var(--color-device-active-border);
+  background: var(--color-device-active-bg);
+  box-shadow: var(--shadow-glow);
+}
+
+.device-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: color var(--duration-normal) var(--ease-default);
+}
+
+.device-tile.active .device-name {
+  color: var(--color-text-primary);
+}
+
+.not-found {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+}
+
+.not-found .error {
+  color: var(--color-danger);
+  font-weight: 500;
+  margin: 0 0 var(--space-4) 0;
+}
+</style>

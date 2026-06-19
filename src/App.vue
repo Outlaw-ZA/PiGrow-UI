@@ -1,59 +1,124 @@
-<!-- src/App.vue -->
 <template>
-  <div style="font-family: system-ui, sans-serif; min-height: 100vh; background-color: #f8fafc">
-    <!-- NAVIGATION BAR HEADER LAYER -->
-    <nav
-      style="
-        background: #ffffff;
-        border-bottom: 1px solid #e2e8f0;
-        padding: 1rem 2rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        sticky: top;
-        z-index: 100;
-      "
-    >
-      <div style="display: flex; align-items: center; gap: 0.5rem">
-        <span style="font-size: 1.5rem">⚙️</span>
-        <span style="font-weight: 800; font-size: 1.25rem; color: #0f172a; letter-spacing: -0.025em"
-          >PiGrow Control Center</span
-        >
+  <div class="app-shell">
+    <nav class="nav">
+      <div class="brand">
+        <span class="brand-name">PiGrow</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-suffix">Control Center</span>
       </div>
-
-      <div style="display: flex; gap: 1.5rem">
-        <router-link to="/" class="nav-link" active-class="active-link"
-          >📊 Live Monitor</router-link
-        >
+      <div class="nav-links">
+        <router-link to="/" class="nav-link" active-class="active-link">Live Monitor</router-link>
         <router-link to="/admin" class="nav-link" active-class="active-link"
-          >🛠️ Administration</router-link
+          >Administration</router-link
         >
       </div>
     </nav>
-
-    <!-- CONTENT ELEMENT RENDER LAYER -->
-    <main style="padding: 2rem; max-w-7xl: mx-auto">
+    <main class="content">
       <router-view />
-      <!-- This tag acts as an injector placeholder for our current view page module! -->
     </main>
   </div>
 </template>
 
 <style scoped>
+.app-shell {
+  min-height: 100vh;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  background-image:
+    radial-gradient(circle at 0% 0%, rgba(34, 197, 94, 0.04) 0px, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.03) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+.nav {
+  background: rgba(21, 29, 46, 0.85);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-8);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 1px 0 0 rgba(34, 197, 94, 0.05),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: var(--tracking-tight);
+}
+
+.brand-name {
+  color: var(--color-text-primary);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand-name::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+  animation: pulse-dot 2s var(--ease-default) infinite;
+}
+
+.brand-divider {
+  color: var(--color-bg-muted);
+  font-weight: 300;
+}
+
+.brand-suffix {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.nav-links {
+  display: flex;
+  gap: var(--space-1);
+}
+
 .nav-link {
   text-decoration: none;
-  color: #64748b;
-  font-weight: 600;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: var(--text-md);
+  padding: 0.4375rem 0.875rem;
+  border-radius: var(--radius-md);
+  transition:
+    color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default);
+  cursor: pointer;
 }
+
 .nav-link:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
+
 .active-link {
-  color: #10b981 !important;
-  background: #ecfdf5;
+  color: var(--color-accent);
+  background: var(--color-accent-bg);
+  box-shadow: inset 0 0 0 1px var(--color-accent-border);
+}
+
+.content {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-8);
+  animation: fade-in var(--duration-slow) var(--ease-out);
 }
 </style>

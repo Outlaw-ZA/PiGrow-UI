@@ -1,135 +1,96 @@
-<!-- src/views/HomeView.vue -->
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useGrowStore } from '../stores/growStore'
 import Card from 'primevue/card'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import Tag from 'primevue/tag'
 
 const store = useGrowStore()
 
 onMounted(() => {
   store.fetchAll()
 })
+
+const statusSeverity = (status: string) => (status === 'ONLINE' ? 'success' : 'danger')
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-      "
-    >
-      <!-- Explicitly override the color to a deep slate color (#0f172a) -->
-      <h1 style="font-size: 1.875rem; font-weight: 700; color: #0f172a; margin: 0">
-        🌿 Real-time Facility Monitor
-      </h1>
-      <span
-        style="
-          background: #10b981;
-          color: white;
-          padding: 0.5rem 1rem;
-          border-radius: 20px;
-          font-weight: bold;
-        "
-      >
-        Active Cycles: {{ store.growCycles.filter((g) => g.isActive).length }}
-      </span>
-    </div>
+  <div class="page">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">Real-time Facility Monitor</h1>
+        <p class="page-subtitle">Live overview of active grow cycles and controller nodes</p>
+      </div>
+      <div class="active-badge">
+        <span class="dot"></span>
+        <span>{{ store.growCycles.filter((g) => g.isActive).length }} active</span>
+      </div>
+    </header>
 
-    <!-- MAIN METRIC GRID LAYOUT -->
-    <div
-      style="
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 3rem;
-      "
-    >
+    <div class="cycle-grid">
       <div
         v-for="cycle in store.growCycles"
         :key="cycle.id"
+        class="cycle-card-wrapper"
         @click="$router.push(`/grow/${cycle.id}`)"
-        style="cursor: pointer; transition: transform 0.15s ease-in-out"
-        class="hover-scale-card"
       >
-        <Card style="border-left: 5px solid #22c55e; height: 100%">
-          <!-- Update the #title template slot with an explicit white color override -->
-          <template #title>
-            <span
-              style="
-                color: #ffffff;
-                font-weight: 700;
-                font-size: 1.25rem;
-                display: block;
-                margin-bottom: 0.25rem;
-              "
-            >
-              📋 {{ cycle.name }}
-            </span>
-          </template>
-
+        <Card class="cycle-card">
+          <template #title>{{ cycle.name }}</template>
           <template #subtitle>
-            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap">
-              <span :style="{ color: cycle.isActive ? '#22c55e' : '#94a3b8', fontWeight: 'bold' }">
-                {{ cycle.isActive ? '● RUNNING' : '○ PAUSED' }}
-              </span>
-              <span
-                v-if="cycle.controller"
-                :style="{
-                  color: cycle.controller.status === 'ONLINE' ? '#22c55e' : '#ef4444',
-                  fontSize: '0.75rem',
-                }"
-              >
-                {{ cycle.controller.status === 'ONLINE' ? '●' : '○' }}
+            <div class="cycle-subtitle">
+              <Tag
+                :value="cycle.isActive ? 'Running' : 'Paused'"
+                :severity="cycle.isActive ? 'success' : 'secondary'"
+                rounded
+              />
+              <span v-if="cycle.controller" class="controller-link">
                 {{ cycle.controller.name }}
               </span>
             </div>
           </template>
           <template #content>
-            <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem">Linked Node IP:</p>
-            <code
-              style="
-                background: #f1f5f9;
-                padding: 0.2rem 0.4rem;
-                border-radius: 4px;
-                color: #334155;
-              "
-            >
+            <p class="field-label">Linked Node IP</p>
+            <code class="ip-address">
               {{
                 store.controllers.find((c) => c.id === cycle.controllerId)?.ipAddress ||
-                'Unassigned Host'
+                'Unassigned'
               }}
             </code>
-            <div style="margin-top: 1rem; font-size: 0.85rem; color: #10b981; font-weight: 600">
-              Click to open monitoring panel →
-            </div>
+            <div class="open-link">Open monitoring panel →</div>
           </template>
         </Card>
       </div>
     </div>
 
-    <!-- CONTROLLERS OVERVIEW -->
     <Card>
-      <template #title>📡 Physical Hardware Nodes (`Controllers` Layer)</template>
+      <template #title>Controller Nodes</template>
       <template #content>
-        <DataTable :value="store.controllers" responsiveLayout="scroll" class="p-datatable-striped">
-          <Column field="name" header="Name" style="font-weight: bold"></Column>
-          <Column field="ipAddress" header="Local IP Address"></Column>
-          <Column field="macAddress" header="MAC Address"></Column>
-          <Column field="status" header="Network State">
+        <DataTable
+          :value="store.controllers"
+          size="small"
+          paginator
+          :rows="10"
+          :rowsPerPageOptions="[10, 20, 50]"
+        >
+          <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
+          <Column field="ipAddress" header="IP Address" sortable>
             <template #body="slotProps">
-              <span
-                :style="{
-                  color: slotProps.data.status === 'ONLINE' ? '#22c55e' : '#ef4444',
-                  fontWeight: 'bold',
-                }"
-              >
-                ● {{ slotProps.data.status || 'OFFLINE' }}
-              </span>
+              <code class="meta-code">{{ slotProps.data.ipAddress }}</code>
+            </template>
+          </Column>
+          <Column field="macAddress" header="MAC Address" sortable>
+            <template #body="slotProps">
+              <code class="meta-code">{{ slotProps.data.macAddress }}</code>
+            </template>
+          </Column>
+          <Column field="status" header="Status" sortable>
+            <template #body="slotProps">
+              <Tag
+                :value="slotProps.data.status || 'OFFLINE'"
+                :severity="statusSeverity(slotProps.data.status)"
+                rounded
+              />
             </template>
           </Column>
         </DataTable>
@@ -139,7 +100,133 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.hover-scale-card:hover {
-  transform: translateY(-4px);
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.page-title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: var(--tracking-tight);
+}
+
+.page-subtitle {
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  margin: var(--space-1) 0 0 0;
+}
+
+.active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: 500;
+  border: 1px solid var(--color-accent-border);
+}
+
+.active-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+  animation: pulse-dot 2s var(--ease-default) infinite;
+}
+
+.cycle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.cycle-card-wrapper {
+  cursor: pointer;
+  transition:
+    transform var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.cycle-card-wrapper:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow-strong);
+}
+
+.cycle-card {
+  height: 100%;
+  border-top: 2px solid var(--color-accent);
+  background: var(--color-bg-surface);
+  transition: border-color var(--duration-normal) var(--ease-default);
+}
+
+.cycle-card-wrapper:hover .cycle-card {
+  border-top-color: var(--color-accent-hover);
+}
+
+.cycle-subtitle {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
+}
+
+.controller-link {
+  font-size: var(--text-base);
+  color: var(--color-text-secondary);
+}
+
+.field-label {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin: 0 0 0.375rem 0;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  font-weight: 500;
+}
+
+.ip-address {
+  background: var(--color-code-bg);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-code-text);
+  font-size: var(--text-base);
+  border: 1px solid var(--color-border);
+}
+
+.open-link {
+  margin-top: var(--space-4);
+  font-size: var(--text-base);
+  color: var(--color-accent);
+  font-weight: 500;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.cycle-card-wrapper:hover .open-link {
+  color: var(--color-accent-hover);
+}
+
+.meta-code {
+  background: var(--color-code-bg);
+  padding: 0.1875rem 0.4375rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-code-text);
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
 }
 </style>

@@ -1,0 +1,25 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: npx oxlint --fix {staged_files}
+      stage_fixed: true
+    format:
+      run: npx oxfmt --write {staged_files}
+      stage_fixed: true
+    type-check:
+      glob: '*.{ts,tsx,vue}'
+      run: npx @rslint/tsgo -config tsconfig.json && npx vue-tsc --noEmit
+      skip:
+        - merge
+        - rebase
+
+pre-push:
+  parallel: false
+  commands:
+    lint:
+      run: npx oxlint --fix {staged_files}
+    type-check:
+      run: npx @rslint/tsgo -config tsconfig.json
+    build:
+      run: npm run build

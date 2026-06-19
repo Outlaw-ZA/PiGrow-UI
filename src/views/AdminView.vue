@@ -1,4 +1,3 @@
-<!-- src/views/AdminView.vue -->
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -7,6 +6,7 @@ import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Card from 'primevue/card'
+import Tag from 'primevue/tag'
 
 const store = useGrowStore()
 const router = useRouter()
@@ -29,38 +29,57 @@ async function deleteGrowCycle(id: string) {
 </script>
 
 <template>
-  <div style="display: flex; flex-direction: column; gap: 3rem">
-    <!-- SECTION 1: PHYSICAL INFRASTRUCTURE CONTROLLERS -->
+  <div class="admin-page">
     <Card>
       <template #title>
-        <div style="display: flex; justify-content: space-between; align-items: center">
-          <span>📟 Physical Infrastructure Controllers</span>
+        <div class="section-header">
+          <span>Controllers</span>
           <Button
-            label="Create New Controller"
+            label="New Controller"
             icon="pi pi-plus"
+            size="small"
             @click="router.push('/admin/controllers/new')"
           />
         </div>
       </template>
       <template #content>
-        <DataTable :value="store.controllers" responsiveLayout="scroll">
-          <Column field="name" header="Name"></Column>
-          <Column field="ipAddress" header="IP Address"></Column>
-          <Column field="macAddress" header="MAC Address"></Column>
-          <Column header="Actions">
+        <DataTable
+          :value="store.controllers"
+          size="small"
+          paginator
+          :rows="10"
+          :rowsPerPageOptions="[10, 20, 50]"
+        >
+          <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
+          <Column field="ipAddress" header="IP Address" sortable>
             <template #body="slotProps">
-              <div style="display: flex; gap: 0.25rem">
+              <code class="meta-code">{{ slotProps.data.ipAddress }}</code>
+            </template>
+          </Column>
+          <Column field="macAddress" header="MAC Address" sortable>
+            <template #body="slotProps">
+              <code class="meta-code">{{ slotProps.data.macAddress }}</code>
+            </template>
+          </Column>
+          <Column header="Actions" style="width: 140px">
+            <template #body="slotProps">
+              <div class="row-actions">
                 <Button
-                  label="Edit"
                   icon="pi pi-pencil"
                   severity="secondary"
+                  text
+                  rounded
                   size="small"
+                  aria-label="Edit"
                   @click="router.push(`/admin/controllers/edit/${slotProps.data.id}`)"
                 />
                 <Button
                   icon="pi pi-trash"
                   severity="danger"
+                  text
+                  rounded
                   size="small"
+                  aria-label="Delete"
                   @click="deleteController(slotProps.data.id)"
                 />
               </div>
@@ -70,41 +89,56 @@ async function deleteGrowCycle(id: string) {
       </template>
     </Card>
 
-    <!-- SECTION 2: LOGICAL GROW CYCLES -->
     <Card>
       <template #title>
-        <div style="display: flex; justify-content: space-between; align-items: center">
-          <span>🌱 Logical Grow Running Cycles</span>
+        <div class="section-header">
+          <span>Grow Cycles</span>
           <Button
-            label="Create New Grow Cycle"
-            icon="pi pi-calendar-plus"
+            label="New Grow Cycle"
+            icon="pi pi-plus"
+            size="small"
             severity="success"
             @click="router.push('/admin/grows/new')"
           />
         </div>
       </template>
       <template #content>
-        <DataTable :value="store.growCycles" responsiveLayout="scroll">
-          <Column field="name" header="Run Identification Name"></Column>
-          <Column field="isActive" header="Status">
+        <DataTable
+          :value="store.growCycles"
+          size="small"
+          paginator
+          :rows="10"
+          :rowsPerPageOptions="[10, 20, 50]"
+        >
+          <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
+          <Column field="isActive" header="Status" sortable>
             <template #body="slotProps">
-              <span>{{ slotProps.data.isActive ? '🟢 Running' : '⚪ Static' }}</span>
+              <Tag
+                :value="slotProps.data.isActive ? 'Running' : 'Idle'"
+                :severity="slotProps.data.isActive ? 'success' : 'secondary'"
+                rounded
+              />
             </template>
           </Column>
-          <Column header="Actions">
+          <Column header="Actions" style="width: 140px">
             <template #body="slotProps">
-              <div style="display: flex; gap: 0.25rem">
+              <div class="row-actions">
                 <Button
-                  label="Edit"
-                  icon="pi pi-cog"
+                  icon="pi pi-pencil"
                   severity="secondary"
+                  text
+                  rounded
                   size="small"
+                  aria-label="Edit"
                   @click="router.push(`/admin/grows/edit/${slotProps.data.id}`)"
                 />
                 <Button
                   icon="pi pi-trash"
                   severity="danger"
+                  text
+                  rounded
                   size="small"
+                  aria-label="Delete"
                   @click="deleteGrowCycle(slotProps.data.id)"
                 />
               </div>
@@ -115,3 +149,32 @@ async function deleteGrowCycle(id: string) {
     </Card>
   </div>
 </template>
+
+<style scoped>
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.row-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.meta-code {
+  background: var(--color-code-bg);
+  padding: 0.1875rem 0.4375rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-code-text);
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
+}
+</style>
