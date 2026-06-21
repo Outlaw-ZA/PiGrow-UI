@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useGrowStore } from '../../stores/growStore'
+import { useApiStore } from '../../stores/apiStore'
 import { DeviceType } from '../../types/grow'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -12,7 +12,7 @@ import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 
-const store = useGrowStore()
+const store = useApiStore()
 const route = useRoute()
 const router = useRouter()
 

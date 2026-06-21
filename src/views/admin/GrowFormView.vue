@@ -1,44 +1,186 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useGrowStore } from '../../stores/growStore'
-import type { GrowPhase } from '../../types/grow'
+import { useApiStore } from '../../stores/apiStore'
+import type { Device, DeviceConfig, GrowPhase } from '../../types/grow'
+import { TriggerType } from '../../types/grow'
+import {
+  deriveActivePhaseIndex,
+  deriveGrowActive,
+  formatDate,
+  parseDateOnly,
+  recalculatePhaseDates,
+} from '../../utils/growDates'
+import {
+  TRIGGER_TYPE_OPTIONS,
+  buildConfigPayload,
+  defaultConfigForm,
+  normalizeScheduleConfig,
+  normalizeThresholdConfig,
+} from '../../utils/deviceConfigs'
+import type { ConfigFormState } from '../../utils/deviceConfigs'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
 import Select from 'primevue/select'
-import ToggleSwitch from 'primevue/toggleswitch'
+import DatePicker from 'primevue/datepicker'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 
-const store = useGrowStore()
+const store = useApiStore()
 const route = useRoute()
 const router = useRouter()
 
 const growId = computed(() => route.params.id as string | undefined)
 const isEditMode = computed(() => Boolean(growId.value))
 
-const form = ref({ controllerId: '', isActive: false, name: '' })
+const form = ref({ controllerId: '', name: '' })
+const growStartDate = ref<Date>(new Date())
 const phases = ref<GrowPhase[]>([])
 const ready = ref(false)
 const saving = ref(false)
-
-function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0] ?? ''
-}
+const previousActivePhaseId = ref<string | null>(null)
 
 function recalculateDates() {
-  const cursor = new Date()
-  cursor.setHours(0, 0, 0, 0)
-  for (const phase of phases.value) {
-    phase.startAt = formatDate(cursor)
-    cursor.setDate(cursor.getDate() + phase.durationDays)
-    phase.endAt = formatDate(cursor)
-  }
+  recalculatePhaseDates(phases.value, growStartDate.value)
 }
 
 const controllerOptions = computed(() => store.controllers.filter((c) => c.id != null))
 
 const totalCycleDays = computed(() => phases.value.reduce((sum, p) => sum + p.durationDays, 0))
+
+const sortedPhases = computed(() => [...phases.value].toSorted((a, b) => a.order - b.order))
+
+const selectedPhaseId = ref<string | null>(null)
+const deviceConfigForms = ref<Record<string, ConfigFormState>>({})
+const onTimeDate = ref<Record<string, Date | null>>({})
+
+const linkedController = computed(() =>
+  store.controllers.find((c) => c.id === form.value.controllerId),
+)
+const controllerDevices = computed<Device[]>(() => linkedController.value?.devices ?? [])
+const selectedPhase = computed<GrowPhase | undefined>(() =>
+  phases.value.find((p) => p.id && p.id === selectedPhaseId.value),
+)
+const selectablePhases = computed(() =>
+  sortedPhases.value.filter((p) => p.id != null).map((p) => ({ id: p.id as string, name: p.name })),
+)
+
+const configRows = computed(() =>
+  controllerDevices.value
+    .filter((d): d is Device & { id: string } => d.id != null)
+    .map((device) => {
+      const formState = deviceConfigForms.value[device.id]
+      return { device, formState }
+    })
+    .filter(
+      (row): row is { device: Device & { id: string }; formState: ConfigFormState } =>
+        row.formState != null,
+    ),
+)
+
+function getForm(deviceId: string): ConfigFormState {
+  const formState = deviceConfigForms.value[deviceId]
+  if (!formState) {
+    deviceConfigForms.value[deviceId] = defaultConfigForm()
+    return deviceConfigForms.value[deviceId]!
+  }
+  return formState
+}
+
+function initDeviceConfigFormsForPhase(phase: GrowPhase | undefined) {
+  const next: Record<string, ConfigFormState> = {}
+  const nextTimes: Record<string, Date | null> = {}
+  const existing = phase?.deviceConfigs ?? []
+  for (const device of controllerDevices.value) {
+    if (!device.id) {
+      continue
+    }
+    const current = existing.find((c) => c.deviceId === device.id)
+    if (current) {
+      const { triggerType } = current
+      const form: ConfigFormState = {
+        ...defaultConfigForm(),
+        dirty: false,
+        id: current.id,
+        triggerType,
+      }
+      if (triggerType === TriggerType.SCHEDULE) {
+        const sched = normalizeScheduleConfig(current.configData)
+        form.onTime = sched.onTime
+        form.durationHours = sched.durationHours
+        nextTimes[device.id] = parseTimeOfDay(sched.onTime)
+      } else if (triggerType === TriggerType.THRESHOLD) {
+        const thresh = normalizeThresholdConfig(current.configData)
+        form.metric = thresh.metric
+        form.high = thresh.high
+      }
+      next[device.id] = form
+    } else {
+      const blank = defaultConfigForm()
+      next[device.id] = blank
+      nextTimes[device.id] = parseTimeOfDay(blank.onTime)
+    }
+  }
+  deviceConfigForms.value = next
+  onTimeDate.value = nextTimes
+}
+
+function parseTimeOfDay(hhmm: string): Date | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm)
+  if (!match) {
+    return null
+  }
+  const date = new Date()
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0)
+  return date
+}
+
+function formatTimeOfDay(date: Date | null | undefined): string {
+  if (!date) {
+    return '00:00'
+  }
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
+function markDirty(deviceId: string) {
+  const formState = deviceConfigForms.value[deviceId]
+  if (formState) {
+    formState.dirty = true
+  }
+}
+
+function onTriggerTypeChange(deviceId: string, val: TriggerType) {
+  const formState = deviceConfigForms.value[deviceId]
+  if (formState) {
+    formState.triggerType = val
+    formState.dirty = true
+  }
+}
+
+function onOnTimeChange(deviceId: string, val: Date | null) {
+  onTimeDate.value[deviceId] = val
+  const formState = deviceConfigForms.value[deviceId]
+  if (formState) {
+    formState.onTime = formatTimeOfDay(val)
+    formState.dirty = true
+  }
+}
+
+watch(selectedPhaseId, (id) => {
+  const phase = phases.value.find((p) => p.id === id)
+  initDeviceConfigFormsForPhase(phase)
+})
+
+watch(
+  () => controllerDevices.value.map((d) => d.id).join('|'),
+  () => {
+    if (selectedPhaseId.value) {
+      initDeviceConfigFormsForPhase(selectedPhase.value)
+    }
+  },
+)
 
 function getDefaultPhases(): GrowPhase[] {
   return [
@@ -55,6 +197,8 @@ watch(
   () => recalculateDates(),
   { deep: true },
 )
+
+watch(growStartDate, () => recalculateDates())
 
 onMounted(async () => {
   try {
@@ -76,9 +220,18 @@ async function loadExistingCycle(id: string) {
   const cycle = await store.fetchGrowCycle(id)
   form.value.controllerId = cycle.controllerId ?? ''
   form.value.name = cycle.name
-  form.value.isActive = cycle.isActive
+  if (cycle.startAt) {
+    growStartDate.value = parseDateOnly(cycle.startAt)
+  }
   phases.value = cycle.phases ? [...cycle.phases] : []
   recalculateDates()
+  const previouslyActive = phases.value.find((p) => p.isActive && p.id)
+  previousActivePhaseId.value = previouslyActive?.id ?? null
+  if (cycle.controllerId) {
+    await store.fetchDevices(cycle.controllerId)
+  }
+  const firstPhaseWithId = phases.value.find((p) => p.id)
+  selectedPhaseId.value = firstPhaseWithId?.id ?? null
 }
 
 function addPhase() {
@@ -101,22 +254,114 @@ async function removePhase(index: number) {
   }
   if (phase.id) {
     await store.deleteGrowPhase(phase.id)
+    if (previousActivePhaseId.value === phase.id) {
+      previousActivePhaseId.value = null
+    }
   }
   phases.value.splice(index, 1)
   phases.value.forEach((p, i) => (p.order = i + 1))
   recalculateDates()
 }
 
-async function savePhase(phase: GrowPhase): Promise<GrowPhase | null> {
+async function savePhase(phase: GrowPhase, cycleId?: string): Promise<GrowPhase | null> {
   if (phase.id) {
     return await store.updateGrowPhase(phase.id, {
       durationDays: phase.durationDays,
+      endAt: phase.endAt,
       isActive: phase.isActive,
       name: phase.name,
       order: phase.order,
+      startAt: phase.startAt,
     })
   }
+  const targetCycleId = cycleId ?? growId.value
+  if (targetCycleId) {
+    const created = await store.createGrowPhase({
+      durationDays: phase.durationDays,
+      endAt: phase.endAt,
+      growCycleId: targetCycleId,
+      isActive: false,
+      name: phase.name,
+      order: phase.order,
+      startAt: phase.startAt,
+    })
+    phase.id = created.id
+    return created
+  }
   return null
+}
+
+async function reconcileActivePhase() {
+  const activeIdx = deriveActivePhaseIndex(sortedPhases.value)
+  if (activeIdx >= 0) {
+    const target = sortedPhases.value[activeIdx]
+    if (target && target.id && target.id !== previousActivePhaseId.value) {
+      await store.activateGrowPhase(target.id)
+    }
+    return
+  }
+  if (previousActivePhaseId.value) {
+    await store.updateGrowPhase(previousActivePhaseId.value, { isActive: false })
+  }
+}
+
+async function saveDeviceConfig(deviceId: string) {
+  const phase = selectedPhase.value
+  if (!phase || !phase.id) {
+    return
+  }
+  const formState = deviceConfigForms.value[deviceId]
+  if (!formState) {
+    return
+  }
+  const payload = buildConfigPayload(formState)
+  try {
+    let result: DeviceConfig
+    if (formState.id) {
+      result = await store.updateDeviceConfig(formState.id, payload)
+    } else {
+      result = await store.createDeviceConfig({
+        configData: payload.configData,
+        deviceId,
+        growPhaseId: phase.id,
+        triggerType: payload.triggerType,
+      })
+    }
+    formState.id = result.id
+    formState.dirty = false
+    if (!phase.deviceConfigs) {
+      phase.deviceConfigs = []
+    }
+    const idx = phase.deviceConfigs.findIndex((c) => c.id === result.id)
+    if (idx !== -1) {
+      phase.deviceConfigs[idx] = result
+    } else {
+      phase.deviceConfigs.push(result)
+    }
+  } catch (error) {
+    console.error('Failed to save device config', error)
+  }
+}
+
+async function removeDeviceConfig(deviceId: string) {
+  const phase = selectedPhase.value
+  if (!phase || !phase.deviceConfigs) {
+    return
+  }
+  const formState = deviceConfigForms.value[deviceId]
+  const config = phase.deviceConfigs.find((c) => c.deviceId === deviceId)
+  if (!config || !config.id) {
+    return
+  }
+  try {
+    await store.deleteDeviceConfig(config.id)
+    phase.deviceConfigs = phase.deviceConfigs.filter((c) => c.id !== config.id)
+    if (formState) {
+      deviceConfigForms.value[deviceId] = defaultConfigForm()
+    }
+  } catch (error) {
+    console.error('Failed to delete device config', error)
+  }
 }
 
 const handleSave = async () => {
@@ -126,22 +371,49 @@ const handleSave = async () => {
   }
   saving.value = true
   try {
+    const startAtDate = formatDate(growStartDate.value)
     if (isEditMode.value && growId.value) {
+      const growActive = deriveGrowActive(startAtDate, sortedPhases.value)
       await store.updateGrowCycle(growId.value, {
         controllerId: form.value.controllerId,
-        isActive: form.value.isActive,
+        isActive: growActive,
         name: form.value.name,
+        startAt: startAtDate,
       })
       for (const phase of phases.value) {
         await savePhase(phase)
       }
+      await reconcileActivePhase()
       router.push('/admin')
     } else {
-      await store.createGrowCycle({
+      const created = await store.createGrowCycle({
         controllerId: form.value.controllerId,
-        isActive: form.value.isActive,
         name: form.value.name,
+        startAt: startAtDate,
       })
+      const backendPhases = created.phases ?? []
+      const userPhases = sortedPhases.value
+
+      for (let i = 0; i < userPhases.length; i++) {
+        const userPhase = userPhases[i]
+        const backendPhase = backendPhases[i]
+        if (userPhase && backendPhase) {
+          userPhase.id = backendPhase.id
+          await savePhase(userPhase)
+        } else if (userPhase) {
+          await savePhase(userPhase, created.id)
+        }
+      }
+      for (let i = userPhases.length; i < backendPhases.length; i++) {
+        const backendPhase = backendPhases[i]
+        if (backendPhase?.id) {
+          await store.deleteGrowPhase(backendPhase.id)
+        }
+      }
+
+      const growActive = deriveGrowActive(startAtDate, sortedPhases.value)
+      await store.updateGrowCycle(created.id, { isActive: growActive })
+      await reconcileActivePhase()
       router.push('/admin')
     }
   } catch (error) {
@@ -184,14 +456,18 @@ const handleSave = async () => {
               class="full-width"
             />
           </div>
-          <div class="switch-row">
-            <ToggleSwitch v-model="form.isActive" inputId="grow-active" />
-            <label for="grow-active" class="field-label-inline">
-              Set Target Execution State Active
-            </label>
+          <div class="field">
+            <label for="grow-start-date" class="field-label">Grow Start Date</label>
+            <DatePicker
+              id="grow-start-date"
+              v-model="growStartDate"
+              dateFormat="yy-mm-dd"
+              showIcon
+              class="full-width"
+            />
           </div>
 
-          <div v-if="isEditMode" class="phases-section">
+          <div class="phases-section">
             <div class="phases-header">
               <h3 class="phases-title">Grow Phases</h3>
               <Button
@@ -259,6 +535,135 @@ const handleSave = async () => {
             </div>
           </div>
 
+          <div v-if="isEditMode && controllerDevices.length > 0" class="device-configs-section">
+            <div class="device-configs-header">
+              <h3 class="device-configs-title">Device Configuration</h3>
+              <span class="device-configs-hint">Edits save immediately per device.</span>
+            </div>
+
+            <div class="field">
+              <label for="config-phase" class="field-label-sm">Select Phase</label>
+              <Select
+                id="config-phase"
+                v-model="selectedPhaseId"
+                :options="selectablePhases"
+                optionLabel="name"
+                optionValue="id"
+                placeholder="Select a phase to configure"
+                class="full-width"
+              />
+            </div>
+
+            <div v-if="selectedPhase" class="config-rows">
+              <div v-for="row in configRows" :key="row.device.id" class="config-row">
+                <div class="config-row-header">
+                  <div class="config-device-info">
+                    <span class="config-device-name">{{ row.device.name }}</span>
+                    <span class="type-pill">{{ row.device.type.replace(/_/g, ' ') }}</span>
+                  </div>
+                </div>
+
+                <div class="config-fields">
+                  <div class="field">
+                    <label :for="`trigger-${row.device.id}`" class="field-label-sm"
+                      >Trigger Type</label
+                    >
+                    <Select
+                      :inputId="`trigger-${row.device.id}`"
+                      v-model="row.formState.triggerType"
+                      :options="TRIGGER_TYPE_OPTIONS"
+                      optionLabel="label"
+                      optionValue="value"
+                      class="full-width"
+                      @update:modelValue="
+                        (val: TriggerType) => onTriggerTypeChange(row.device.id, val)
+                      "
+                    />
+                  </div>
+
+                  <template v-if="row.formState.triggerType === TriggerType.SCHEDULE">
+                    <div class="field">
+                      <label :for="`onTime-${row.device.id}`" class="field-label-sm">On Time</label>
+                      <DatePicker
+                        :inputId="`onTime-${row.device.id}`"
+                        v-model="onTimeDate[row.device.id]"
+                        timeOnly
+                        hourFormat="24"
+                        class="full-width"
+                        @update:modelValue="
+                          (val) => onOnTimeChange(row.device.id, val as Date | null)
+                        "
+                      />
+                    </div>
+                    <div class="field">
+                      <label :for="`dur-${row.device.id}`" class="field-label-sm"
+                        >Duration (hours)</label
+                      >
+                      <InputNumber
+                        :inputId="`dur-${row.device.id}`"
+                        v-model="row.formState.durationHours"
+                        :min="0.1"
+                        :max="24"
+                        :minFractionDigits="1"
+                        :maxFractionDigits="1"
+                        @update:modelValue="markDirty(row.device.id)"
+                      />
+                    </div>
+                  </template>
+
+                  <template v-else-if="row.formState.triggerType === TriggerType.THRESHOLD">
+                    <div class="field">
+                      <label :for="`metric-${row.device.id}`" class="field-label-sm">Metric</label>
+                      <InputText
+                        :inputId="`metric-${row.device.id}`"
+                        v-model="row.formState.metric"
+                        placeholder="TEMP, HUMIDITY, CO2..."
+                        class="full-width"
+                        @update:modelValue="markDirty(row.device.id)"
+                      />
+                    </div>
+                    <div class="field">
+                      <label :for="`high-${row.device.id}`" class="field-label-sm"
+                        >High Threshold</label
+                      >
+                      <InputNumber
+                        :inputId="`high-${row.device.id}`"
+                        v-model="row.formState.high"
+                        :minFractionDigits="1"
+                        :maxFractionDigits="2"
+                        @update:modelValue="markDirty(row.device.id)"
+                      />
+                    </div>
+                  </template>
+
+                  <div v-else class="config-note">
+                    No additional parameters for this trigger type.
+                  </div>
+                </div>
+
+                <div class="config-row-actions">
+                  <Button
+                    label="Save Config"
+                    icon="pi pi-save"
+                    size="small"
+                    severity="success"
+                    :disabled="!row.formState.dirty"
+                    @click="saveDeviceConfig(row.device.id)"
+                  />
+                  <Button
+                    v-if="row.formState.id"
+                    label="Delete"
+                    icon="pi pi-trash"
+                    size="small"
+                    severity="danger"
+                    text
+                    @click="removeDeviceConfig(row.device.id)"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="form-actions">
             <Button
               :label="isEditMode ? 'Commit Changes' : 'Initialize Batch'"
@@ -309,21 +714,8 @@ const handleSave = async () => {
   font-weight: 500;
 }
 
-.field-label-inline {
-  font-size: var(--text-md);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  cursor: pointer;
-}
-
 .full-width {
   width: 100%;
-}
-
-.switch-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
 }
 
 .phases-section {
@@ -451,5 +843,98 @@ const handleSave = async () => {
   display: flex;
   gap: var(--space-4);
   margin-top: var(--space-2);
+}
+
+.device-configs-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.device-configs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.device-configs-title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  font-size: var(--text-xl);
+}
+
+.device-configs-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  font-weight: 500;
+}
+
+.config-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.config-row {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--duration-normal) var(--ease-default);
+}
+
+.config-row:hover {
+  border-color: var(--color-bg-muted);
+}
+
+.config-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.config-device-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.config-device-name {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.config-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+
+.config-note {
+  display: flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: var(--space-2) 0;
+}
+
+.config-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-subtle);
 }
 </style>

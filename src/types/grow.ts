@@ -47,6 +47,7 @@ export interface GrowCycleListItem {
   controllerId: string
   name: string
   isActive: boolean
+  startAt: string | null
   createdAt: string
   updatedAt: string
   controller: {
@@ -60,6 +61,7 @@ export interface GrowCycle {
   controllerId: string
   name: string
   isActive: boolean
+  startAt: string | null
   createdAt: string
   updatedAt: string
   controller?: Controller

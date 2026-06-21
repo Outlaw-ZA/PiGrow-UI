@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { useGrowStore } from '../stores/growStore'
+import { useApiStore } from '../stores/apiStore'
 import Card from 'primevue/card'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 
-const store = useGrowStore()
+const store = useApiStore()
 
 onMounted(() => {
   store.fetchAll()

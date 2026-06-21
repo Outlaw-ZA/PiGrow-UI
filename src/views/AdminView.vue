@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useGrowStore } from '../stores/growStore'
+import { useApiStore } from '../stores/apiStore'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 
-const store = useGrowStore()
+const store = useApiStore()
 const router = useRouter()
 
 onMounted(() => {
@@ -120,6 +120,14 @@ async function deleteGrowCycle(id: string) {
               />
             </template>
           </Column>
+          <Column field="startAt" header="Start Date" sortable>
+            <template #body="slotProps">
+              <code v-if="slotProps.data.startAt" class="meta-code">
+                {{ slotProps.data.startAt }}
+              </code>
+              <span v-else class="muted">—</span>
+            </template>
+          </Column>
           <Column header="Actions" style="width: 140px">
             <template #body="slotProps">
               <div class="row-actions">
@@ -176,5 +184,10 @@ async function deleteGrowCycle(id: string) {
   color: var(--color-code-text);
   font-size: var(--text-sm);
   border: 1px solid var(--color-border);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 </style>
