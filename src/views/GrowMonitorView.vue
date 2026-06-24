@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
 import type { DeviceConfig, GrowPhase } from '../types/grow'
@@ -26,6 +26,9 @@ import Accordion from 'primevue/accordion'
 import AccordionPanel from 'primevue/accordionpanel'
 import AccordionHeader from 'primevue/accordionheader'
 import AccordionContent from 'primevue/accordioncontent'
+import Menu from 'primevue/menu'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useConfirm } from 'primevue/useconfirm'
 
 const route = useRoute()
 const router = useRouter()
@@ -85,11 +88,134 @@ const deviceToggles = reactive<Record<string, boolean>>({})
 
 const openPhasePanels = ref<string[]>([])
 
+const confirm = useConfirm()
+const phaseMenu = useTemplateRef<InstanceType<typeof Menu>>('phaseMenu')
+const skipping = ref(false)
+const ending = ref(false)
+
+const canSkipPhase = computed(
+  () =>
+    Boolean(currentCycle.value?.startAt) &&
+    activePhaseIndex.value >= 0 &&
+    activePhaseIndex.value < sortedPhases.value.length - 1,
+)
+
+const isOnLastPhase = computed(
+  () => activePhaseIndex.value >= 0 && activePhaseIndex.value === sortedPhases.value.length - 1,
+)
+
+const isGrowComplete = computed(() => {
+  const cycle = currentCycle.value
+  if (!cycle?.startAt) {return false}
+  if (activePhaseIndex.value >= 0) {return false}
+  const lastPhase = sortedPhases.value.at(-1)
+  return Boolean(lastPhase?.endAt) && todayStr() >= lastPhase.endAt
+})
+
+const phaseMenuItems = computed(() => {
+  if (isOnLastPhase.value) {
+    return [
+      {
+        command: () => confirmEndGrow(),
+        disabled: ending.value,
+        icon: 'pi pi-trophy',
+        label: 'End grow',
+      },
+    ]
+  }
+  return [
+    {
+      command: () => confirmSkipPhase(),
+      disabled: !canSkipPhase.value || skipping.value,
+      icon: 'pi pi-forward',
+      label: 'Skip to next phase',
+    },
+  ]
+})
+
+function togglePhaseMenu(event: Event) {
+  phaseMenu.value?.toggle(event)
+}
+
+function confirmSkipPhase() {
+  if (!canSkipPhase.value) {
+    return
+  }
+  const active = sortedPhases.value[activePhaseIndex.value]
+  if (!active || !active.endAt) {
+    return
+  }
+  const leftoverDays = daysBetween(todayStr(), active.endAt)
+  const nextName = sortedPhases.value[activePhaseIndex.value + 1]?.name ?? 'next phase'
+  confirm.require({
+    accept: executeSkipPhase,
+    acceptLabel: 'Skip phase',
+    acceptProps: { severity: 'warn' },
+    header: 'Skip to next phase',
+    icon: 'pi pi-exclamation-triangle',
+    message: `This will end "${active.name}" today and advance to "${nextName}". Approximately ${leftoverDays} day${leftoverDays === 1 ? '' : 's'} will be removed from the overall grow cycle. This cannot be undone.`,
+    rejectLabel: 'Cancel',
+  })
+}
+
+async function executeSkipPhase() {
+  if (!cycleId.value) {
+    return
+  }
+  skipping.value = true
+  try {
+    await store.skipGrowPhase(cycleId.value, todayStr())
+  } catch (error) {
+    console.error('Failed to skip grow phase', error)
+    await store.fetchGrowCycle(cycleId.value)
+  } finally {
+    skipping.value = false
+  }
+}
+
+function confirmEndGrow() {
+  if (!isOnLastPhase.value) {
+    return
+  }
+  const active = sortedPhases.value[activePhaseIndex.value]
+  if (!active || !active.endAt) {
+    return
+  }
+  const leftoverDays = daysBetween(todayStr(), active.endAt)
+  confirm.require({
+    accept: executeEndGrow,
+    acceptLabel: 'End grow',
+    acceptProps: { severity: 'danger' },
+    header: 'End grow',
+    icon: 'pi pi-exclamation-triangle',
+    message: `This will end the grow cycle today. "${active.name}" will be trimmed to its elapsed days and the grow will be marked complete. Approximately ${leftoverDays} day${leftoverDays === 1 ? '' : 's'} will be removed from the overall cycle. This cannot be undone.`,
+    rejectLabel: 'Cancel',
+  })
+}
+
+async function executeEndGrow() {
+  if (!cycleId.value) {
+    return
+  }
+  ending.value = true
+  try {
+    await store.endGrow(cycleId.value, todayStr())
+  } catch (error) {
+    console.error('Failed to end grow', error)
+    await store.fetchGrowCycle(cycleId.value)
+  } finally {
+    ending.value = false
+  }
+}
+
 function phaseDeviceCount(phase: GrowPhase): number {
   return phase.deviceConfigs?.length ?? 0
 }
 
 const activePhaseName = computed(() => {
+  if (isGrowComplete.value) {
+    return 'Complete'
+  }
   const idx = activePhaseIndex.value
   if (idx < 0) {
     return 'Not started'
@@ -98,6 +224,9 @@ const activePhaseName = computed(() => {
 })
 
 const activePhaseSub = computed(() => {
+  if (isGrowComplete.value) {
+    return 'Grow ended'
+  }
   const idx = activePhaseIndex.value
   if (idx < 0) {
     return 'No active phase'
@@ -334,6 +463,7 @@ function statusSeverity(status?: string) {
 </script>
 
 <template>
+  <ConfirmDialog />
   <div v-if="currentCycle" class="monitor-page">
     <div class="back-row">
       <Button
@@ -469,7 +599,23 @@ function statusSeverity(status?: string) {
     </Card>
 
     <Card>
-      <template #title>Phases</template>
+      <template #title>
+        <div class="phase-card-title">
+          <span>Phases</span>
+          <Button
+            v-if="activePhaseIndex >= 0"
+            icon="pi pi-ellipsis-v"
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            aria-label="Phase options"
+            :disabled="skipping || ending"
+            @click="togglePhaseMenu"
+          />
+          <Menu ref="phaseMenu" :model="phaseMenuItems" popup />
+        </div>
+      </template>
       <template #content>
         <div v-if="sortedPhases.length" class="phases-wrapper">
           <div class="phase-track">
@@ -1295,5 +1441,13 @@ function statusSeverity(status?: string) {
   color: var(--color-text-muted);
   text-align: center;
   font-style: italic;
+}
+
+.phase-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
 }
 </style>

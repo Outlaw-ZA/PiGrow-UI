@@ -1,0 +1,365 @@
+{
+  "nodes": [
+    {
+      "id": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "label": ".oxlintrc.json",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L1"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_schema",
+      "label": "$schema",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L2"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_plugins",
+      "label": "plugins",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories",
+      "label": "categories",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L4"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_correctness",
+      "label": "correctness",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L5"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_suspicious",
+      "label": "suspicious",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L6"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_pedantic",
+      "label": "pedantic",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L7"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_perf",
+      "label": "perf",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L8"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_style",
+      "label": "style",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L9"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_restriction",
+      "label": "restriction",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L10"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_categories_nursery",
+      "label": "nursery",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L11"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules",
+      "label": "rules",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L13"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules_no_console",
+      "label": "no-console",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L14"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules_no_debugger",
+      "label": "no-debugger",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L15"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules_no_unused_vars",
+      "label": "no-unused-vars",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L16"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules_import_no_cycle",
+      "label": "import/no-cycle",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L17"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_rules_unicorn_no_null",
+      "label": "unicorn/no-null",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L18"
+    },
+    {
+      "id": "pigrow_ui_oxlintrc_ignorepatterns",
+      "label": "ignorePatterns",
+      "file_type": "code",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L20"
+    }
+  ],
+  "edges": [
+    {
+      "source": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "target": "pigrow_ui_oxlintrc_schema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "target": "pigrow_ui_oxlintrc_plugins",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_plugins",
+      "target": "ref_import",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_plugins",
+      "target": "ref_unicorn",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_plugins",
+      "target": "ref_typescript",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_plugins",
+      "target": "ref_oxc",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L3",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "target": "pigrow_ui_oxlintrc_categories",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_correctness",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_suspicious",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_pedantic",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_perf",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_style",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_restriction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_categories",
+      "target": "pigrow_ui_oxlintrc_categories_nursery",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "target": "pigrow_ui_oxlintrc_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules",
+      "target": "pigrow_ui_oxlintrc_rules_no_console",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules",
+      "target": "pigrow_ui_oxlintrc_rules_no_debugger",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules",
+      "target": "pigrow_ui_oxlintrc_rules_no_unused_vars",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules_no_unused_vars",
+      "target": "ref_warn",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L16",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules",
+      "target": "pigrow_ui_oxlintrc_rules_import_no_cycle",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_rules",
+      "target": "pigrow_ui_oxlintrc_rules_unicorn_no_null",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "home_apollo_code_pigrow_ui_oxlintrc_json",
+      "target": "pigrow_ui_oxlintrc_ignorepatterns",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_ignorepatterns",
+      "target": "ref_dist",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L20",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_ignorepatterns",
+      "target": "ref_node_modules",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L20",
+      "weight": 1.0,
+      "context": "import"
+    },
+    {
+      "source": "pigrow_ui_oxlintrc_ignorepatterns",
+      "target": "ref_config",
+      "relation": "extends",
+      "confidence": "EXTRACTED",
+      "source_file": ".oxlintrc.json",
+      "source_location": "L20",
+      "weight": 1.0,
+      "context": "import"
+    }
+  ]
+}

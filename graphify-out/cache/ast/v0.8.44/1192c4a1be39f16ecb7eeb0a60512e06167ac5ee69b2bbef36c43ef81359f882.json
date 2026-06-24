@@ -1,0 +1,527 @@
+{
+  "nodes": [
+    {
+      "id": "home_apollo_code_pigrow_ui_api_md",
+      "label": "API.md",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "pigrow_ui_api_pigrow_rest_api_reference",
+      "label": "PiGrow REST API Reference",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "label": "Controllers (Raspberry Pi Hubs)",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L9"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_controllers",
+      "label": "`GET /api/controllers`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_controllers_id",
+      "label": "`GET /api/controllers/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L29"
+    },
+    {
+      "id": "pigrow_ui_api_post_api_controllers",
+      "label": "`POST /api/controllers`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L46"
+    },
+    {
+      "id": "pigrow_ui_api_put_api_controllers_id",
+      "label": "`PUT /api/controllers/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L63"
+    },
+    {
+      "id": "pigrow_ui_api_delete_api_controllers_id",
+      "label": "`DELETE /api/controllers/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L79"
+    },
+    {
+      "id": "pigrow_ui_api_devices_gpio_hardware",
+      "label": "Devices (GPIO Hardware)",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L88"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_devices_controller_controllerid",
+      "label": "`GET /api/devices/controller/:controllerId`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L90"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_device_id",
+      "label": "`GET /api/device/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L115"
+    },
+    {
+      "id": "pigrow_ui_api_post_api_device",
+      "label": "`POST /api/device`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L131"
+    },
+    {
+      "id": "pigrow_ui_api_put_api_device_id",
+      "label": "`PUT /api/device/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L151"
+    },
+    {
+      "id": "pigrow_ui_api_delete_api_device_id",
+      "label": "`DELETE /api/device/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L170"
+    },
+    {
+      "id": "pigrow_ui_api_grow_cycles",
+      "label": "Grow Cycles",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L179"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_grow_cycles",
+      "label": "`GET /api/grow-cycles`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L181"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_grow_cycles_id",
+      "label": "`GET /api/grow-cycles/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L203"
+    },
+    {
+      "id": "pigrow_ui_api_post_api_grow_cycles",
+      "label": "`POST /api/grow-cycles`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L244"
+    },
+    {
+      "id": "pigrow_ui_api_put_api_grow_cycles_id",
+      "label": "`PUT /api/grow-cycles/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L274"
+    },
+    {
+      "id": "pigrow_ui_api_delete_api_grow_cycles_id",
+      "label": "`DELETE /api/grow-cycles/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L295"
+    },
+    {
+      "id": "pigrow_ui_api_grow_phases",
+      "label": "Grow Phases",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L304"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_grow_phases_cycle_growcycleid",
+      "label": "`GET /api/grow-phases/cycle/:growCycleId`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L306"
+    },
+    {
+      "id": "pigrow_ui_api_get_api_grow_phases_id",
+      "label": "`GET /api/grow-phases/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L340"
+    },
+    {
+      "id": "pigrow_ui_api_post_api_grow_phases",
+      "label": "`POST /api/grow-phases`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L347"
+    },
+    {
+      "id": "pigrow_ui_api_put_api_grow_phases_id",
+      "label": "`PUT /api/grow-phases/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L368"
+    },
+    {
+      "id": "pigrow_ui_api_delete_api_grow_phases_id",
+      "label": "`DELETE /api/grow-phases/:id`",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L388"
+    },
+    {
+      "id": "pigrow_ui_api_device_configs",
+      "label": "Device Configs",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L397"
+    },
+    {
+      "id": "pigrow_ui_api_trigger_types_configdata_shapes",
+      "label": "Trigger Types & ConfigData Shapes",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L401"
+    },
+    {
+      "id": "pigrow_ui_api_telemetry",
+      "label": "Telemetry",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L412"
+    },
+    {
+      "id": "pigrow_ui_api_mqtt_ingestion",
+      "label": "MQTT Ingestion",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L416"
+    },
+    {
+      "id": "pigrow_ui_api_socket_io_events",
+      "label": "Socket.IO Events",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L422"
+    },
+    {
+      "id": "pigrow_ui_api_error_response_format",
+      "label": "Error Response Format",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L431"
+    },
+    {
+      "id": "pigrow_ui_api_typescript_types_summary_for_fe",
+      "label": "TypeScript Types Summary (for FE)",
+      "file_type": "document",
+      "source_file": "API.md",
+      "source_location": "L445"
+    }
+  ],
+  "edges": [
+    {
+      "source": "home_apollo_code_pigrow_ui_api_md",
+      "target": "pigrow_ui_api_pigrow_rest_api_reference",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "target": "pigrow_ui_api_get_api_controllers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "target": "pigrow_ui_api_get_api_controllers_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "target": "pigrow_ui_api_post_api_controllers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "target": "pigrow_ui_api_put_api_controllers_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L63",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_controllers_raspberry_pi_hubs",
+      "target": "pigrow_ui_api_delete_api_controllers_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_devices_gpio_hardware",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_devices_gpio_hardware",
+      "target": "pigrow_ui_api_get_api_devices_controller_controllerid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_devices_gpio_hardware",
+      "target": "pigrow_ui_api_get_api_device_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_devices_gpio_hardware",
+      "target": "pigrow_ui_api_post_api_device",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L131",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_devices_gpio_hardware",
+      "target": "pigrow_ui_api_put_api_device_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_devices_gpio_hardware",
+      "target": "pigrow_ui_api_delete_api_device_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L170",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_grow_cycles",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_cycles",
+      "target": "pigrow_ui_api_get_api_grow_cycles",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L181",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_cycles",
+      "target": "pigrow_ui_api_get_api_grow_cycles_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L203",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_cycles",
+      "target": "pigrow_ui_api_post_api_grow_cycles",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L244",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_cycles",
+      "target": "pigrow_ui_api_put_api_grow_cycles_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L274",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_cycles",
+      "target": "pigrow_ui_api_delete_api_grow_cycles_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L295",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_grow_phases",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L304",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_phases",
+      "target": "pigrow_ui_api_get_api_grow_phases_cycle_growcycleid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L306",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_phases",
+      "target": "pigrow_ui_api_get_api_grow_phases_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L340",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_phases",
+      "target": "pigrow_ui_api_post_api_grow_phases",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L347",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_phases",
+      "target": "pigrow_ui_api_put_api_grow_phases_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L368",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_grow_phases",
+      "target": "pigrow_ui_api_delete_api_grow_phases_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L388",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_device_configs",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L397",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_device_configs",
+      "target": "pigrow_ui_api_trigger_types_configdata_shapes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L401",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_telemetry",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L412",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_telemetry",
+      "target": "pigrow_ui_api_mqtt_ingestion",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L416",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_telemetry",
+      "target": "pigrow_ui_api_socket_io_events",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L422",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_error_response_format",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L431",
+      "weight": 1.0
+    },
+    {
+      "source": "pigrow_ui_api_pigrow_rest_api_reference",
+      "target": "pigrow_ui_api_typescript_types_summary_for_fe",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "API.md",
+      "source_location": "L445",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

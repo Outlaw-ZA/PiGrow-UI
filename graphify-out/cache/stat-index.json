@@ -1,0 +1,92 @@
+{
+  "/home/apollo/code/PiGrow-UI/.opencode/package.json": {
+    "size": 64,
+    "mtime_ns": 1781847622723985822,
+    "hash": "08dffa087f514194a301f77dafe11d6e98d06cfa352f52f73bf37d3fc961f433"
+  },
+  "/home/apollo/code/PiGrow-UI/.opencode/skills/ui-ux-pro-max/scripts/core.py": {
+    "size": 10227,
+    "mtime_ns": 1781847131285129069,
+    "hash": "9d451a05c934d291e7094d73ab13013e31e5c93d48a26ae1177ec32bc49fa90d"
+  },
+  "/home/apollo/code/PiGrow-UI/.opencode/skills/ui-ux-pro-max/scripts/design_system.py": {
+    "size": 43614,
+    "mtime_ns": 1781847131288129007,
+    "hash": "83e47bb6510b26239f04ce05887ebe3e88e1ed35707fe5a3b68dafd4c4a3691f"
+  },
+  "/home/apollo/code/PiGrow-UI/.opencode/skills/ui-ux-pro-max/scripts/search.py": {
+    "size": 5478,
+    "mtime_ns": 1781847131287129028,
+    "hash": "7252c705d8bf1cc136aded23628a6226de1652670962d493feaadd5bb692752b"
+  },
+  "/home/apollo/code/PiGrow-UI/.oxfmtrc.json": {
+    "size": 179,
+    "mtime_ns": 1781850491018864246,
+    "hash": "74f1bc70af662318c503e59b049461db43a2e7745e1103d41638faacad40eecf"
+  },
+  "/home/apollo/code/PiGrow-UI/.oxlintrc.json": {
+    "size": 559,
+    "mtime_ns": 1781850517971511347,
+    "hash": "b59c19a89c13d666fd2256c179b2c2404bfea41f4a1e2f0c4470af75a3558a6f"
+  },
+  "/home/apollo/code/PiGrow-UI/.prettierrc.json": {
+    "size": 120,
+    "mtime_ns": 1781517827676457432,
+    "hash": "2c552d01a9b0f1e7b8373ecca598a8c5fa66514d389ca771d1ebd7d5bdf8ffce"
+  },
+  "/home/apollo/code/PiGrow-UI/.vscode/extensions.json": {
+    "size": 77,
+    "mtime_ns": 1781517827676457432,
+    "hash": "92ca49b704c6d65050544142bbdcbc446625886753c746954e661b2c8545c1e1"
+  },
+  "/home/apollo/code/PiGrow-UI/package.json": {
+    "size": 1356,
+    "mtime_ns": 1781850508366638195,
+    "hash": "727c7f08b8405e2fa6d94f297bd6b404496f30ccce33264791c3a91731ec2832"
+  },
+  "/home/apollo/code/PiGrow-UI/tsconfig.app.json": {
+    "size": 641,
+    "mtime_ns": 1781851080693597500,
+    "hash": "565592fe4cd11dcfd2d0b607a3905f9fc639ff7a72eed1bbe5e709a4c28da486"
+  },
+  "/home/apollo/code/PiGrow-UI/tsconfig.json": {
+    "size": 139,
+    "mtime_ns": 1781517827675457452,
+    "hash": "dfaed2a2bd237431af895fd2e9395614761ff3a873e9f5b6222ba63c495665b0"
+  },
+  "/home/apollo/code/PiGrow-UI/tsconfig.node.json": {
+    "size": 964,
+    "mtime_ns": 1781517827675457452,
+    "hash": "54f7a8cf9ad6b3ada55159ee598f09c85066ccddadda78eb7d5c8ce123b14812"
+  },
+  "/home/apollo/code/PiGrow-UI/.opencode/plans/design-system-implementation.md": {
+    "size": 9603,
+    "mtime_ns": 1781850995615081056,
+    "hash": "d1e5fe0eb0e6f55983177560d180b7f20a12af14392d81f4d11e6b1f5000b010"
+  },
+  "/home/apollo/code/PiGrow-UI/.opencode/skills/ui-ux-pro-max/SKILL.md": {
+    "size": 12460,
+    "mtime_ns": 1781850995509082883,
+    "hash": "57c090a312c02e7696cdcb648f996a0ec228c2cda5c810a4d4b4a0d087bca4ab"
+  },
+  "/home/apollo/code/PiGrow-UI/API-ENDPOINTS.md": {
+    "size": 8198,
+    "mtime_ns": 1782060007931741651,
+    "hash": "f5b9f3aaebf8e658a813573dfd33436314363b1b3530a59ba2ddb5d0a372ebd0"
+  },
+  "/home/apollo/code/PiGrow-UI/API.md": {
+    "size": 12614,
+    "mtime_ns": 1782060008135737392,
+    "hash": "1192c4a1be39f16ecb7eeb0a60512e06167ac5ee69b2bbef36c43ef81359f882"
+  },
+  "/home/apollo/code/PiGrow-UI/README.md": {
+    "size": 4036,
+    "mtime_ns": 1781850995410084589,
+    "hash": "52af74788d99de7345a2aaa49dc4e651af1d7a4df0f1be1641331385a15fccf5"
+  },
+  "/home/apollo/code/PiGrow-UI/design-system/pigrow/MASTER.md": {
+    "size": 6872,
+    "mtime_ns": 1781850995512082831,
+    "hash": "beea0fca9ab727ad47ae25dd09c9a2af1499843eaa92b0dcc5575b884cdacd0d"
+  }
+}

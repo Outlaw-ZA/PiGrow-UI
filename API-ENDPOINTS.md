@@ -33,13 +33,15 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 
 ## Grow Cycles
 
-| Method   | Endpoint               | FE Scenario                                                                     |
-| -------- | ---------------------- | ------------------------------------------------------------------------------- |
-| `GET`    | `/api/grow-cycles`     | HomeView cards, AdminView list (includes basic controller info)                 |
-| `GET`    | `/api/grow-cycles/:id` | GrowMonitorView full detail (controller, phases, deviceConfigs, devices nested) |
-| `POST`   | `/api/grow-cycles`     | GrowFormView create (auto-generates 4 default phases with device configs)       |
-| `PUT`    | `/api/grow-cycles/:id` | GrowFormView edit (name, controllerId, isActive, startAt as YYYY-MM-DD)         |
-| `DELETE` | `/api/grow-cycles/:id` | AdminView delete                                                                |
+| Method   | Endpoint                          | FE Scenario                                                                                                                                          |
+| -------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/grow-cycles`                | HomeView cards, AdminView list (includes basic controller info)                                                                                      |
+| `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases, deviceConfigs, devices nested)                                                                      |
+| `POST`   | `/api/grow-cycles`                | GrowFormView create (auto-generates 4 default phases with device configs)                                                                            |
+| `PUT`    | `/api/grow-cycles/:id`            | GrowFormView edit (name, controllerId, isActive, startAt as YYYY-MM-DD)                                                                              |
+| `DELETE` | `/api/grow-cycles/:id`            | AdminView delete                                                                                                                                     |
+| `POST`   | `/api/grow-cycles/:id/skip-phase` | GrowMonitorView skip active phase (atomic: trims duration + cascades dates + activates next phase). Optional `?today=YYYY-MM-DD` query.              |
+| `POST`   | `/api/grow-cycles/:id/end-grow`   | GrowMonitorView end the grow cycle (atomic: trims active phase + marks cycle inactive + deactivates all phases). Optional `?today=YYYY-MM-DD` query. |
 
 ---
 

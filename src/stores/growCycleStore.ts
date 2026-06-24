@@ -68,12 +68,36 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
     return res.data as GrowCycle
   }
 
+  async function skipGrowPhase(id: string, today?: string) {
+    const res = await axios.post(`${API_BASE}/grow-cycles/${id}/skip-phase`, undefined, {
+      params: today ? { today } : undefined,
+    })
+    const idx = growCycles.value.findIndex((g) => g.id === id)
+    if (idx !== -1) {
+      growCycles.value[idx] = res.data
+    }
+    return res.data as GrowCycle
+  }
+
+  async function endGrow(id: string, today?: string) {
+    const res = await axios.post(`${API_BASE}/grow-cycles/${id}/end-grow`, undefined, {
+      params: today ? { today } : undefined,
+    })
+    const idx = growCycles.value.findIndex((g) => g.id === id)
+    if (idx !== -1) {
+      growCycles.value[idx] = res.data
+    }
+    return res.data as GrowCycle
+  }
+
   return {
     createGrowCycle,
     deleteGrowCycle,
+    endGrow,
     fetchAll,
     fetchGrowCycle,
     growCycles,
+    skipGrowPhase,
     updateGrowCycle,
   }
 })
