@@ -39,7 +39,21 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
 
   async function fetchAll() {
     const res = await axios.get(`${API_BASE}/grow-cycles`)
-    growCycles.value = res.data
+    const list = res.data as GrowCycleListItem[]
+    for (const item of list) {
+      const idx = growCycles.value.findIndex((g) => g.id === item.id)
+      if (idx !== -1) {
+        const existing = growCycles.value[idx]
+        const merged = { ...existing, ...item }
+        const existingController = existing?.controller as { id?: string } | undefined
+        if (existingController && 'id' in existingController) {
+          merged.controller = existing!.controller
+        }
+        growCycles.value[idx] = merged as GrowCycleListItem
+      } else {
+        growCycles.value.push(item)
+      }
+    }
   }
 
   async function createGrowCycle(payload: CreateGrowCyclePayload) {
@@ -82,7 +96,9 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
     const cycle = res.data as GrowCycle
     const idx = growCycles.value.findIndex((g) => g.id === id)
     if (idx !== -1) {
-      growCycles.value[idx] = { ...growCycles.value[idx], ...toListItem(cycle) }
+      growCycles.value[idx] = { ...growCycles.value[idx], ...cycle } as GrowCycleListItem
+    } else {
+      growCycles.value.push(cycle as unknown as GrowCycleListItem)
     }
     return cycle
   }
@@ -93,7 +109,10 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
     })
     const idx = growCycles.value.findIndex((g) => g.id === id)
     if (idx !== -1) {
-      growCycles.value[idx] = { ...growCycles.value[idx], ...toListItem(res.data as GrowCycle) }
+      growCycles.value[idx] = {
+        ...growCycles.value[idx],
+        ...(res.data as GrowCycle),
+      } as GrowCycleListItem
     }
     return res.data as GrowCycle
   }
@@ -104,7 +123,10 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
     })
     const idx = growCycles.value.findIndex((g) => g.id === id)
     if (idx !== -1) {
-      growCycles.value[idx] = { ...growCycles.value[idx], ...toListItem(res.data as GrowCycle) }
+      growCycles.value[idx] = {
+        ...growCycles.value[idx],
+        ...(res.data as GrowCycle),
+      } as GrowCycleListItem
     }
     return res.data as GrowCycle
   }

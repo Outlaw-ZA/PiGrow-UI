@@ -102,7 +102,7 @@ const configRows = computed(() => {
     .map((device) => {
       const key = deviceKey(device)
       const formState = deviceConfigForms.value[key]
-      const config = configs.find((c) => c.deviceId === (device.id ?? device.localKey))
+      const config = configs.find((c) => c.deviceId === deviceKey(device))
       return { config, device, formState, key }
     })
     .filter(
@@ -118,7 +118,7 @@ const configRows = computed(() => {
 })
 
 function deviceKey(device: Device): string {
-  return device.id ?? device.localKey ?? ''
+  return device.id || device.localKey || ''
 }
 
 function getForm(key: string): ConfigFormState {
@@ -139,7 +139,7 @@ function initDeviceConfigFormsForPhase(phase: GrowPhase | undefined) {
     if (!key) {
       continue
     }
-    const current = existing.find((c) => c.deviceId === (device.id ?? device.localKey))
+    const current = existing.find((c) => c.deviceId === deviceKey(device))
     if (current) {
       const { triggerType } = current
       const form: ConfigFormState = {
@@ -193,9 +193,8 @@ function genLocalKey(prefix: string): string {
   return `${prefix}-${++localKeySeq}`
 }
 
-watch(selectedPhaseKey, (id) => {
-  const phase = phases.value.find((p) => p.id === id)
-  initDeviceConfigFormsForPhase(phase)
+watch(selectedPhaseKey, () => {
+  initDeviceConfigFormsForPhase(selectedPhase.value)
 })
 
 watch(
@@ -445,7 +444,7 @@ const editingDeviceHasConfig = computed(() => {
   if (!dev) {
     return false
   }
-  const ref = dev.id ?? dev.localKey
+  const ref = deviceKey(dev)
   return Boolean(selectedPhase.value?.deviceConfigs?.some((c) => c.deviceId === ref))
 })
 
@@ -633,7 +632,7 @@ async function saveDeviceConfig(key: string) {
       console.error('Failed to save device config', error)
     }
   } else {
-    const ref = device.id ?? device.localKey ?? key
+    const ref = deviceKey(device) || key
     const staged: DeviceConfig = {
       configData: payload.configData,
       deviceId: ref,
@@ -666,7 +665,7 @@ async function removeDeviceConfig(key: string) {
   if (!device) {
     return
   }
-  const ref = device.id ?? device.localKey ?? key
+  const ref = deviceKey(device) || key
   const configs = phase.deviceConfigs ?? []
   const config = configs.find((c) => c.deviceId === ref)
   if (!config) {
