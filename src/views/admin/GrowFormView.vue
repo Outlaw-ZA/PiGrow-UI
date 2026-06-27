@@ -328,7 +328,7 @@ const phaseDraft = ref<GrowPhase>({
 
 const phaseDraftDateRange = computed<{ start: string; end: string }>(() => {
   if (!phaseDraft.value.durationDays) {
-    return { start: '—', end: '—' }
+    return { end: '—', start: '—' }
   }
   const idx = editingPhaseIndex.value ?? phases.value.length
   const cursor = new Date(growStartDate.value)
@@ -433,7 +433,7 @@ const configModalSubtitle = computed(() => {
   if (!dev || !selectedPhase.value) {
     return ''
   }
-  return `${selectedPhase.value.name} · ${dev.type.replaceAll(/_/g, ' ')}`
+  return `${selectedPhase.value.name} · ${dev.type.replaceAll('_', ' ')}`
 })
 
 const editingDeviceHasConfig = computed(() => {

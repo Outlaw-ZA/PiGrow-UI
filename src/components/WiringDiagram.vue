@@ -33,7 +33,7 @@ const sortedSlots = computed<DeviceSlot[]>(() =>
       const signalPhys = BCM_TO_PHYS.get(signalBcm) ?? -1
       return { color: '', device, signalBcm, signalPhys }
     })
-    .sort((a, b) => a.signalPhys - b.signalPhys)
+    .toSorted((a, b) => a.signalPhys - b.signalPhys)
     .map((slot, i) => ({ ...slot, color: DEVICE_COLORS[i % DEVICE_COLORS.length] as string })),
 )
 
@@ -94,7 +94,7 @@ const slotLines = computed(() =>
     const y = deviceY(i)
     const pinY = pinCenterY(slot.signalPhys)
     const pinLeftEdge = pinX(slot.signalPhys) + colPinWidth
-    return { slot, i, y, pinY, pinLeftEdge }
+    return { i, pinLeftEdge, pinY, slot, y }
   }),
 )
 </script>
