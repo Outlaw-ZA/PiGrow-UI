@@ -2,15 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../../stores/apiStore'
-import { DeviceType } from '../../types/grow'
+import type { Device, GrowCycle } from '../../types/grow'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
-import Dropdown from 'primevue/dropdown'
-import InputSwitch from 'primevue/inputswitch'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
+import Dialog from 'primevue/dialog'
+import WiringDiagram from '../../components/WiringDiagram.vue'
 
 const store = useApiStore()
 const route = useRoute()
@@ -21,37 +21,26 @@ const isEditMode = computed(() => Boolean(controllerId.value))
 
 const form = ref({ ipAddress: '', macAddress: '', name: '' })
 
-const deviceTypeOptions = Object.values(DeviceType).map((t) => ({
-  label: t.replaceAll('_', ' '),
-  value: t,
-}))
-
-const devices = computed(() => {
+const activeGrows = computed<GrowCycle[]>(() => {
   if (!controllerId.value) {
     return []
   }
-  const controller = store.controllers.find((c) => c.id === controllerId.value)
-  return controller?.devices || []
+  const controller = store.controllers.find((c) => c.id === controllerId.value) as
+    | ((typeof store.controllers)[number] & { growCycles?: GrowCycle[] })
+    | undefined
+  return controller?.growCycles ?? []
 })
 
-interface DeviceFormData {
-  id: string
-  name: string
-  type: string
-  pinNumber: string
-  mqttTopic: string
-  isActive: boolean
-}
+const totalDevices = computed(() =>
+  activeGrows.value.reduce((sum, g) => sum + (g.devices?.filter((d) => d.isActive).length ?? 0), 0),
+)
 
-const deviceForm = ref<DeviceFormData>({
-  id: '',
-  isActive: true,
-  mqttTopic: '',
-  name: '',
-  pinNumber: '',
-  type: '',
-})
-const isEditingDevice = ref(false)
+const selectedGrowId = ref<string | null>(null)
+const selectedGrow = computed<GrowCycle | null>(
+  () => activeGrows.value.find((g) => g.id === selectedGrowId.value) ?? null,
+)
+const selectedDevices = computed<Device[]>(() => selectedGrow.value?.devices ?? [])
+const showWiring = ref(false)
 
 onMounted(async () => {
   await store.fetchAll()
@@ -64,7 +53,10 @@ onMounted(async () => {
         name: existing.name,
       }
     }
-    await store.fetchDevices(controllerId.value)
+    await store.fetchController(controllerId.value)
+    if (activeGrows.value.length > 0) {
+      selectedGrowId.value = activeGrows.value[0]?.id ?? null
+    }
   }
 })
 
@@ -75,63 +67,6 @@ const handleSave = async () => {
     await store.createController(form.value)
   }
   router.push('/admin')
-}
-
-const handleSaveDevice = async () => {
-  if (!controllerId.value) {
-    return
-  }
-
-  const payload = {
-    controllerId: controllerId.value,
-    isActive: deviceForm.value.isActive,
-    mqttTopic: deviceForm.value.mqttTopic,
-    name: deviceForm.value.name,
-    pinNumber: Number(deviceForm.value.pinNumber),
-    type: deviceForm.value.type as DeviceType,
-  }
-
-  if (isEditingDevice.value) {
-    const { controllerId: _cid, ...updatePayload } = payload
-    await store.updateDevice(deviceForm.value.id, updatePayload)
-  } else {
-    await store.createDevice(payload)
-  }
-  await store.fetchDevices(controllerId.value)
-  resetDeviceForm()
-}
-
-const editDevice = (device: any) => {
-  isEditingDevice.value = true
-  deviceForm.value = {
-    id: device.id,
-    isActive: device.isActive,
-    mqttTopic: device.mqttTopic,
-    name: device.name,
-    pinNumber: String(device.pinNumber),
-    type: device.type,
-  }
-}
-
-const removeDevice = async (deviceId: string) => {
-  if (!controllerId.value) {
-    return
-  }
-  if (confirm('Are you sure you want to remove this device?')) {
-    await store.deleteDevice(deviceId)
-  }
-}
-
-const resetDeviceForm = () => {
-  isEditingDevice.value = false
-  deviceForm.value = {
-    id: '',
-    isActive: true,
-    mqttTopic: '',
-    name: '',
-    pinNumber: '',
-    type: '',
-  }
 }
 </script>
 
@@ -181,75 +116,6 @@ const resetDeviceForm = () => {
             </div>
           </template>
         </Card>
-
-        <Card v-if="isEditMode">
-          <template #title>
-            {{ isEditingDevice ? 'Edit Device' : 'Add Device' }}
-          </template>
-          <template #content>
-            <div class="form-stack">
-              <div class="field">
-                <label for="dev-name" class="field-label">Device Name</label>
-                <InputText
-                  id="dev-name"
-                  v-model="deviceForm.name"
-                  placeholder="DHT22 Temperature Sensor"
-                  fluid
-                />
-              </div>
-
-              <div class="field-row">
-                <div class="field">
-                  <label for="dev-type" class="field-label">Type</label>
-                  <Dropdown
-                    id="dev-type"
-                    v-model="deviceForm.type"
-                    :options="deviceTypeOptions"
-                    optionLabel="label"
-                    optionValue="value"
-                    placeholder="Select type"
-                    fluid
-                  />
-                </div>
-                <div class="field">
-                  <label for="dev-pin" class="field-label">GPIO Pin</label>
-                  <InputText id="dev-pin" v-model="deviceForm.pinNumber" placeholder="4" fluid />
-                </div>
-              </div>
-
-              <div class="field">
-                <label for="dev-topic" class="field-label">MQTT Topic</label>
-                <InputText
-                  id="dev-topic"
-                  v-model="deviceForm.mqttTopic"
-                  placeholder="tent1/device/light/cmd"
-                  fluid
-                />
-              </div>
-
-              <div class="switch-row">
-                <InputSwitch v-model="deviceForm.isActive" inputId="dev-active" />
-                <label for="dev-active" class="field-label-inline">Active</label>
-              </div>
-
-              <div class="form-actions">
-                <Button
-                  v-if="isEditingDevice"
-                  label="Cancel"
-                  severity="secondary"
-                  size="small"
-                  @click="resetDeviceForm"
-                />
-                <Button
-                  :label="isEditingDevice ? 'Update' : 'Add Device'"
-                  size="small"
-                  :disabled="!deviceForm.name"
-                  @click="handleSaveDevice"
-                />
-              </div>
-            </div>
-          </template>
-        </Card>
       </div>
 
       <div v-if="isEditMode" class="devices-column">
@@ -257,18 +123,37 @@ const resetDeviceForm = () => {
           <template #title>
             <div class="section-header">
               <span>Linked Devices</span>
-              <span class="muted">{{ devices.length }} bound</span>
+              <span class="section-header__actions">
+                <span class="muted">
+                  {{ totalDevices }} active across {{ activeGrows.length }} grow{{
+                    activeGrows.length === 1 ? '' : 's'
+                  }}
+                </span>
+                <Button
+                  v-if="selectedDevices.length > 0"
+                  icon="pi pi-sitemap"
+                  label="Wiring"
+                  severity="secondary"
+                  size="small"
+                  text
+                  rounded
+                  v-tooltip.top="'View generated wiring diagram'"
+                  @click="showWiring = true"
+                />
+              </span>
             </div>
           </template>
           <template #content>
-            <DataTable
-              v-if="devices.length > 0"
-              :value="devices"
-              size="small"
-              paginator
-              :rows="10"
-              :rowsPerPageOptions="[10, 20, 50]"
-            >
+            <div v-if="activeGrows.length > 1" class="field">
+              <label for="grow-selector" class="field-label">Grow cycle</label>
+              <select id="grow-selector" v-model="selectedGrowId" class="grow-select">
+                <option v-for="grow in activeGrows" :key="grow.id" :value="grow.id">
+                  {{ grow.name }}
+                </option>
+              </select>
+            </div>
+
+            <DataTable v-if="selectedDevices.length > 0" :value="selectedDevices" size="small">
               <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
               <Column field="type" header="Type" sortable>
                 <template #body="slotProps">
@@ -296,42 +181,33 @@ const resetDeviceForm = () => {
                   />
                 </template>
               </Column>
-              <Column header="Actions" style="width: 100px">
-                <template #body="slotProps">
-                  <div class="row-actions">
-                    <Button
-                      icon="pi pi-pencil"
-                      severity="secondary"
-                      text
-                      rounded
-                      size="small"
-                      aria-label="Edit"
-                      v-tooltip.top="'Edit'"
-                      @click="editDevice(slotProps.data)"
-                    />
-                    <Button
-                      icon="pi pi-trash"
-                      severity="danger"
-                      text
-                      rounded
-                      size="small"
-                      aria-label="Delete"
-                      v-tooltip.top="'Remove'"
-                      @click="removeDevice(slotProps.data.id)"
-                    />
-                  </div>
-                </template>
-              </Column>
             </DataTable>
 
+            <div v-else-if="activeGrows.length > 0" class="empty-state">
+              <span class="pi pi-box empty-icon"></span>
+              <p>This grow cycle has no devices configured yet.</p>
+            </div>
             <div v-else class="empty-state">
               <span class="pi pi-box empty-icon"></span>
-              <p>No devices are linked to this controller yet.</p>
+              <p>
+                No active grow cycle is running on this controller. Devices are scoped to a grow
+                cycle, so start a grow to provision devices.
+              </p>
             </div>
           </template>
         </Card>
       </div>
     </div>
+
+    <Dialog
+      v-model:visible="showWiring"
+      :header="selectedGrow ? `Wiring — ${selectedGrow.name}` : 'Controller Wiring Diagram'"
+      :style="{ width: '90vw', maxWidth: '1100px' }"
+      modal
+      dismissable-mask
+    >
+      <WiringDiagram :devices="selectedDevices" />
+    </Dialog>
   </div>
 </template>
 
@@ -368,15 +244,6 @@ const resetDeviceForm = () => {
   gap: var(--space-4);
 }
 
-.field-row {
-  display: flex;
-  gap: var(--space-4);
-}
-
-.field-row .field {
-  flex: 1;
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -389,17 +256,20 @@ const resetDeviceForm = () => {
   color: var(--color-text-secondary);
 }
 
-.field-label-inline {
+.grow-select {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
   font-size: var(--text-md);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
 }
 
-.switch-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.grow-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
 }
 
 .form-actions {
@@ -416,16 +286,17 @@ const resetDeviceForm = () => {
   width: 100%;
 }
 
+.section-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .muted {
   font-size: var(--text-base);
   color: var(--color-text-muted);
   font-weight: 500;
   font-family: var(--font-mono);
-}
-
-.row-actions {
-  display: flex;
-  gap: var(--space-1);
 }
 
 .type-pill {

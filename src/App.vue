@@ -7,7 +7,7 @@
         <span class="brand-suffix">Control Center</span>
       </div>
       <div class="nav-links">
-        <router-link to="/" class="nav-link" active-class="active-link">Live Monitor</router-link>
+        <router-link to="/" class="nav-link" active-class="active-link">Home</router-link>
         <router-link to="/admin" class="nav-link" active-class="active-link"
           >Administration</router-link
         >
@@ -16,8 +16,13 @@
     <main class="content">
       <router-view />
     </main>
+    <Toast position="bottom-right" />
   </div>
 </template>
+
+<script setup lang="ts">
+import Toast from 'primevue/toast'
+</script>
 
 <style scoped>
 .app-shell {

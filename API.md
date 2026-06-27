@@ -28,18 +28,22 @@ List all registered controllers.
 
 ### `GET /api/controllers/:id`
 
-Get a controller with its devices and active grow cycles.
+Get a controller with its currently-active grow cycles (each with their devices and active phase).
 
 **Response `200`** — Controller plus:
 
 ```ts
 {
   // ...all Controller fields above...
-  devices: Device[];               // Full Device objects (see Device section)
-  growCycles: GrowCycle[];         // Only cycles where isActive === true
-  // Each growCycle includes: phases (only phases where isActive === true)
+  growCycles: Array<{
+    // Full GrowCycle fields plus:
+    devices: Device[] // Per-grow device inventory
+    phases: GrowPhase[] // Only the currently-active phase
+  }> // Only cycles where isActive === true
 }
 ```
+
+No top-level `devices` on the controller — devices are now scoped to grow cycles.
 
 **`404`** — `{ error: "Raspberry Pi configuration profile not found" }`
 
@@ -87,16 +91,16 @@ Remove a controller.
 
 ## Devices (GPIO Hardware)
 
-### `GET /api/devices/controller/:controllerId`
+### `GET /api/devices/grow-cycle/:growCycleId`
 
-List all devices assigned to a specific controller.
+List all devices assigned to a specific grow cycle.
 
 **Response `200`** — Array of:
 
 ```ts
 {
   id: string
-  controllerId: string
+  growCycleId: string
   name: string // e.g. "SpiderFarmer SF2000"
   type: DeviceType
   pinNumber: number // 0-40 (GPIO pin)
@@ -114,14 +118,14 @@ Where `DeviceType` is one of:
 
 ### `GET /api/device/:id`
 
-Get a single device with its controller and device configs.
+Get a single device with its grow cycle and device configs.
 
 **Response `200`** — Device plus:
 
 ```ts
 {
   // ...all Device fields above...
-  controller: Controller;          // Full Controller object
+  growCycle: GrowCycle;            // Full GrowCycle object
   deviceConfigs: DeviceConfig[];   // All DeviceConfig objects for this device
 }
 ```
@@ -130,13 +134,13 @@ Get a single device with its controller and device configs.
 
 ### `POST /api/device`
 
-Provision a new device.
+Provision a new device onto a grow cycle.
 
 **Request body:**
 
 ```ts
 {
-  controllerId: string;   // UUID
+  growCycleId: string;   // UUID
   name: string;           // max 100 chars
   type: DeviceType;       // see above
   pinNumber: number;      // integer 0-40
@@ -147,6 +151,28 @@ Provision a new device.
 
 **Response `201`** — Full Device object.
 **`400`** — `{ error: "Failed to map new hardware device" }`
+
+### `POST /api/device/batch`
+
+Bulk provision multiple devices onto a single grow cycle.
+
+**Request body:**
+
+```ts
+{
+  growCycleId: string // UUID
+  devices: Array<{
+    name: string // max 100 chars
+    type: DeviceType
+    pinNumber: number // 0-40
+    mqttTopic: string // max 150 chars
+    isActive?: boolean // default: true
+  }> // min 1 device
+}
+```
+
+**Response `201`** — Array of created Device objects.
+**`400`** — `{ error: "Failed to map batch hardware devices" }`
 
 ### `PUT /api/device/:id`
 
@@ -243,7 +269,7 @@ Where `TriggerType` is: `"SCHEDULE" | "THRESHOLD" | "ALWAYS_ON" | "ALWAYS_OFF"`
 
 ### `POST /api/grow-cycles`
 
-Create a new grow cycle. **Auto-generates 4 default phases** with device configs based on the controller's active devices.
+Create a new grow cycle. **Atomically** provisions: the grow cycle + the per-grow devices + 4 default phases + per-phase device configs.
 
 **Request body:**
 
@@ -252,6 +278,13 @@ Create a new grow cycle. **Auto-generates 4 default phases** with device configs
   name: string;           // max 100 chars
   controllerId: string;   // UUID
   isActive?: boolean;     // default: false
+  devices: Array<{
+    name: string;         // max 100 chars
+    type: DeviceType;
+    pinNumber: number;    // 0-40
+    mqttTopic: string;    // max 150 chars
+    isActive?: boolean;   // default: true
+  }>;
   // startAt is NOT accepted on create. A new cycle always has startAt: null
   // until set via PUT /api/grow-cycles/:id.
 }
@@ -266,21 +299,21 @@ Create a new grow cycle. **Auto-generates 4 default phases** with device configs
 | 3   | Flowering / Bloom | 60d      | SCHEDULE, 12h on @06:00 | THRESHOLD, TEMP > 26°C   | —           |
 | 4   | Curing / Harvest  | 7d       | ALWAYS_OFF              | —                        | ALWAYS_OFF  |
 
-Configs are only created if the controller has an active device of the corresponding type.
+A config is only created for a phase if the freshly-provisioned device set contains a device of the corresponding type (LIGHT, EXHAUST_FAN, WATER_PUMP).
 
-**Response `201`** — Full GrowCycle with nested phases and deviceConfigs (same shape as `GET /:id`).
+**Response `201`** — Full GrowCycle with nested `devices`, `phases`, and `phases[].deviceConfigs[].device` (same shape as `GET /:id`).
 **`400`** — `{ error: "Failed to create grow cycle record" }`
+**`409`** — `{ error: "Controller already has an active grow cycle. End the current grow before starting a new one." }` (only when `isActive: true` and the controller already has an active grow)
 
 ### `PUT /api/grow-cycles/:id`
 
-Update a grow cycle.
+Update a grow cycle. `controllerId` is **not** accepted — a grow is bound to its controller for life.
 
 **Request body:**
 
 ```ts
 {
   name?: string;           // max 100 chars
-  controllerId?: string;   // UUID
   isActive?: boolean;
   startAt?: string;        // "YYYY-MM-DD" — date only, NO timestamp
 }
@@ -291,6 +324,7 @@ Update a grow cycle.
 
 **Response `200`** — Updated GrowCycle (without nested relations).
 **`400`** — `{ error: "Failed to update grow cycle record" }`
+**`409`** — `{ error: "Controller already has an active grow cycle. End the current grow before starting a new one." }` (only when `isActive: true` and the controller already has another active grow)
 
 ### `DELETE /api/grow-cycles/:id`
 
@@ -473,7 +507,7 @@ interface Controller {
 
 interface Device {
   id: string
-  controllerId: string
+  growCycleId: string
   name: string
   type: DeviceType
   pinNumber: number

@@ -24,7 +24,6 @@ export interface Controller {
   ipAddress: string
   name: string
   status: 'ONLINE' | 'OFFLINE' | 'ERROR'
-  devices?: Device[]
   growCycles?: GrowCycle[]
   createdAt: string
   updatedAt: string
@@ -32,7 +31,7 @@ export interface Controller {
 
 export interface Device {
   id: string
-  controllerId: string
+  growCycleId: string
   name: string
   type: DeviceType
   pinNumber: number
@@ -40,6 +39,15 @@ export interface Device {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  localKey?: string
+}
+
+export interface DeviceSeed {
+  name: string
+  type: DeviceType
+  pinNumber: number
+  mqttTopic: string
+  isActive?: boolean
 }
 
 export interface GrowCycleListItem {
@@ -66,6 +74,7 @@ export interface GrowCycle {
   updatedAt: string
   controller?: Controller
   phases?: GrowPhase[]
+  devices?: Device[]
 }
 
 export interface GrowPhase {
@@ -80,11 +89,12 @@ export interface GrowPhase {
   createdAt?: string
   updatedAt?: string
   deviceConfigs?: DeviceConfig[]
+  localKey?: string
 }
 
 export interface DeviceConfig {
   id?: string
-  growPhaseId: string
+  growPhaseId?: string
   deviceId: string
   triggerType: TriggerType
   configData: Record<string, unknown>

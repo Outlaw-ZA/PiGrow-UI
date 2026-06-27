@@ -66,13 +66,7 @@ const statusSeverity = (status: string) => (status === 'ONLINE' ? 'success' : 'd
     <Card>
       <template #title>Controller Nodes</template>
       <template #content>
-        <DataTable
-          :value="store.controllers"
-          size="small"
-          paginator
-          :rows="10"
-          :rowsPerPageOptions="[10, 20, 50]"
-        >
+        <DataTable v-if="store.controllers.length > 0" :value="store.controllers" size="small">
           <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
           <Column field="ipAddress" header="IP Address" sortable>
             <template #body="slotProps">
@@ -94,6 +88,11 @@ const statusSeverity = (status: string) => (status === 'ONLINE' ? 'success' : 'd
             </template>
           </Column>
         </DataTable>
+
+        <div v-else class="empty-state">
+          <span class="pi pi-server empty-icon"></span>
+          <p>No controller nodes are reporting. Register a controller in Admin to get started.</p>
+        </div>
       </template>
     </Card>
   </div>
@@ -228,5 +227,29 @@ const statusSeverity = (status: string) => (status === 'ONLINE' ? 'success' : 'd
   color: var(--color-code-text);
   font-size: var(--text-sm);
   border: 1px solid var(--color-border);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  text-align: center;
+  background: var(--color-bg-elevated);
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: var(--space-3);
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: var(--text-md);
 }
 </style>

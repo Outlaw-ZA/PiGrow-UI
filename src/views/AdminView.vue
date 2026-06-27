@@ -38,18 +38,13 @@ async function deleteGrowCycle(id: string) {
             label="New Controller"
             icon="pi pi-plus"
             size="small"
+            severity="success"
             @click="router.push('/admin/controllers/new')"
           />
         </div>
       </template>
       <template #content>
-        <DataTable
-          :value="store.controllers"
-          size="small"
-          paginator
-          :rows="10"
-          :rowsPerPageOptions="[10, 20, 50]"
-        >
+        <DataTable v-if="store.controllers.length > 0" :value="store.controllers" size="small">
           <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
           <Column field="ipAddress" header="IP Address" sortable>
             <template #body="slotProps">
@@ -86,6 +81,11 @@ async function deleteGrowCycle(id: string) {
             </template>
           </Column>
         </DataTable>
+
+        <div v-else class="empty-state">
+          <span class="pi pi-server empty-icon"></span>
+          <p>No controllers registered yet. Click <strong>New Controller</strong> to add one.</p>
+        </div>
       </template>
     </Card>
 
@@ -103,13 +103,7 @@ async function deleteGrowCycle(id: string) {
         </div>
       </template>
       <template #content>
-        <DataTable
-          :value="store.growCycles"
-          size="small"
-          paginator
-          :rows="10"
-          :rowsPerPageOptions="[10, 20, 50]"
-        >
+        <DataTable v-if="store.growCycles.length > 0" :value="store.growCycles" size="small">
           <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
           <Column field="isActive" header="Status" sortable>
             <template #body="slotProps">
@@ -153,6 +147,14 @@ async function deleteGrowCycle(id: string) {
             </template>
           </Column>
         </DataTable>
+
+        <div v-else class="empty-state">
+          <span class="pi pi-calendar empty-icon"></span>
+          <p>
+            No grow cycles defined yet. Click <strong>New Grow Cycle</strong> to plan your first
+            one.
+          </p>
+        </div>
       </template>
     </Card>
   </div>
@@ -189,5 +191,29 @@ async function deleteGrowCycle(id: string) {
 .muted {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  text-align: center;
+  background: var(--color-bg-elevated);
+}
+
+.empty-icon {
+  font-size: 2rem;
+  margin-bottom: var(--space-3);
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: var(--text-md);
 }
 </style>

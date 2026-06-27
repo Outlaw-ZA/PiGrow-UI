@@ -61,6 +61,20 @@
   --color-device-active-bg: rgba(34, 197, 94, 0.06);
   --color-device-active-border: rgba(34, 197, 94, 0.35);
 
+  /* Bus / Protocol Annotations */
+  --color-bus-i2c: #a78bfa;
+  --color-bus-i2c-bg: rgba(167, 139, 250, 0.1);
+  --color-bus-i2c-border: rgba(167, 139, 250, 0.3);
+  --color-bus-spi: #22d3ee;
+  --color-bus-spi-bg: rgba(34, 211, 238, 0.1);
+  --color-bus-spi-border: rgba(34, 211, 238, 0.3);
+  --color-bus-uart: #fb923c;
+  --color-bus-uart-bg: rgba(251, 146, 60, 0.1);
+  --color-bus-uart-border: rgba(251, 146, 60, 0.3);
+  --color-bus-pwm: #2dd4bf;
+  --color-bus-pwm-bg: rgba(45, 212, 191, 0.1);
+  --color-bus-pwm-border: rgba(45, 212, 191, 0.3);
+
   /* === TYPOGRAPHY === */
   --font-sans:
     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,

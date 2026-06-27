@@ -19,15 +19,17 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 
 ## Devices
 
-| Method   | Endpoint                                | FE Scenario                                                 |
-| -------- | --------------------------------------- | ----------------------------------------------------------- |
-| `GET`    | `/api/devices/controller/:controllerId` | ControllerFormView device list, GrowMonitorView device card |
-| `GET`    | `/api/devices/:id`                      | Device detail (with configs + controller info)              |
-| `POST`   | `/api/devices`                          | ControllerFormView add device                               |
-| `POST`   | `/api/devices/batch`                    | ControllerFormView bulk add (practical UX)                  |
-| `PUT`    | `/api/devices/:id`                      | ControllerFormView edit device                              |
-| `DELETE` | `/api/devices/:id`                      | ControllerFormView remove device                            |
-| `POST`   | `/api/devices/:id/command`              | GrowMonitorView toggle switches (ON/OFF)                    |
+| Method   | Endpoint                               | FE Scenario                                                  |
+| -------- | -------------------------------------- | ------------------------------------------------------------ |
+| `GET`    | `/api/devices/grow-cycle/:growCycleId` | GrowFormView (edit) device list, GrowMonitorView device card |
+| `GET`    | `/api/devices/:id`                     | Device detail (with configs + grow info)                     |
+| `POST`   | `/api/devices`                         | GrowFormView add device (to an existing grow)                |
+| `POST`   | `/api/devices/batch`                   | Bulk add devices to a grow                                   |
+| `PUT`    | `/api/devices/:id`                     | Edit device                                                  |
+| `DELETE` | `/api/devices/:id`                     | Remove device                                                |
+| `POST`   | `/api/devices/:id/command`             | GrowMonitorView toggle switches (ON/OFF)                     |
+
+Devices are scoped to a grow cycle. The initial provisioning happens in the grow-create payload (see below). Add/edit/remove afterwards targets a specific grow via `growCycleId`.
 
 ---
 
@@ -37,8 +39,8 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 | -------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/grow-cycles`                | HomeView cards, AdminView list (includes basic controller info)                                                                                      |
 | `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases, deviceConfigs, devices nested)                                                                      |
-| `POST`   | `/api/grow-cycles`                | GrowFormView create (auto-generates 4 default phases with device configs)                                                                            |
-| `PUT`    | `/api/grow-cycles/:id`            | GrowFormView edit (name, controllerId, isActive, startAt as YYYY-MM-DD)                                                                              |
+| `POST`   | `/api/grow-cycles`                | GrowFormView create (bundles devices + atomically provisions grow, devices, 4 phases, per-phase device configs)                                      |
+| `PUT`    | `/api/grow-cycles/:id`            | GrowFormView edit (name, isActive, startAt as YYYY-MM-DD — `controllerId` is **not** accepted)                                                       |
 | `DELETE` | `/api/grow-cycles/:id`            | AdminView delete                                                                                                                                     |
 | `POST`   | `/api/grow-cycles/:id/skip-phase` | GrowMonitorView skip active phase (atomic: trims duration + cascades dates + activates next phase). Optional `?today=YYYY-MM-DD` query.              |
 | `POST`   | `/api/grow-cycles/:id/end-grow`   | GrowMonitorView end the grow cycle (atomic: trims active phase + marks cycle inactive + deactivates all phases). Optional `?today=YYYY-MM-DD` query. |
@@ -101,7 +103,17 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 
 ### Grow Cycle Creation
 
-`POST /api/grow-cycles` accepts only `{ name, controllerId, isActive? }` and **auto-generates** 4 default phases. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
+`POST /api/grow-cycles` accepts `{ name, controllerId, isActive?, devices: [...] }` and **atomically** provisions: grow cycle + per-grow devices + 4 default phases + per-phase device configs. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
+
+Each device in the `devices` array: `{ name, type, pinNumber (0–40), mqttTopic, isActive? (default true) }`.
+
+If `isActive: true` is sent but the controller already has an active grow, the response is `409 Conflict`:
+
+```json
+{
+  "error": "Controller already has an active grow cycle. End the current grow before starting a new one."
+}
+```
 
 | #   | Phase Name        | Duration | Light Config            | Exhaust Config           | Pump Config |
 | --- | ----------------- | -------- | ----------------------- | ------------------------ | ----------- |
@@ -110,13 +122,19 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 | 3   | Flowering / Bloom | 60d      | SCHEDULE, 12h on @06:00 | THRESHOLD, TEMP > 26°C   | —           |
 | 4   | Curing / Harvest  | 7d       | ALWAYS_OFF              | —                        | ALWAYS_OFF  |
 
-Configs are only created if the controller has an active device of the corresponding type.
+Configs are only created for a phase if the freshly-provisioned device set contains a device of the corresponding type (LIGHT, EXHAUST_FAN, WATER_PUMP).
+
+### Grow Cycle Update
+
+`PUT /api/grow-cycles/:id` accepts `{ name?, isActive?, startAt? }`. **`controllerId` is intentionally rejected** — a grow is bound to its controller for life. Setting `isActive: true` returns `409` if the controller already has another active grow.
 
 ### Error Format
 
-All errors return `{ error: string }` with appropriate HTTP status (400 for validation, 404 for not found).
+All errors return `{ error: string }` with appropriate HTTP status (400 for validation, 404 for not found, 409 for controller-busy conflicts).
 
 ### Response Nesting Convention
 
 - **List endpoints** (`GET /api/grow-cycles`, `/api/controllers`) — flat with only `controller: { name, status }` included
-- **Detail endpoints** (`GET /api/grow-cycles/:id`, `/api/controllers/:id`) — full nested relations
+- **Detail endpoints**:
+  - `GET /api/grow-cycles/:id` — full nested: `controller`, `devices[]`, `phases[].deviceConfigs[].device`
+  - `GET /api/controllers/:id` — `growCycles` (only active cycles) with each cycle's `phases` (only active phase) + `devices[]` nested. No top-level `devices` on the controller.

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
-import type { DeviceConfig, GrowPhase } from '../types/grow'
+import type { Device, DeviceConfig, GrowPhase } from '../types/grow'
 import { TriggerType } from '../types/grow'
 import {
   addDays,
@@ -18,6 +18,8 @@ import {
   formatConfigSummary,
   normalizeThresholdConfig,
 } from '../utils/deviceConfigs'
+import { extractApiError } from '../utils/errors'
+import { useToast } from 'primevue/usetoast'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
@@ -33,18 +35,30 @@ import { useConfirm } from 'primevue/useconfirm'
 const route = useRoute()
 const router = useRouter()
 const store = useApiStore()
+const toast = useToast()
 
 const cycleId = computed(() => route.params.id as string)
 
-const currentCycle = computed(() => store.growCycles.find((g) => g.id === cycleId.value) as any)
+const currentCycle = computed(
+  () =>
+    store.growCycles.find((g) => g.id === cycleId.value) as
+      | ((typeof store.growCycles)[number] & {
+          phases?: GrowPhase[]
+          devices?: Device[]
+          controller?: (typeof store.controllers)[number]
+        })
+      | undefined,
+)
 
 const linkedController = computed(() => {
   const cycle = currentCycle.value
   if (!cycle) {
     return null
   }
-  return store.controllers.find((c) => c.id === cycle.controllerId) || cycle.controller || null
+  return store.controllers.find((c) => c.id === cycle.controllerId) || (cycle.controller ?? null)
 })
+
+const growDevices = computed<Device[]>(() => currentCycle.value?.devices ?? [])
 
 const sortedPhases = computed(() => {
   const phases = currentCycle.value?.phases
@@ -106,10 +120,17 @@ const isOnLastPhase = computed(
 
 const isGrowComplete = computed(() => {
   const cycle = currentCycle.value
-  if (!cycle?.startAt) {return false}
-  if (activePhaseIndex.value >= 0) {return false}
+  if (!cycle?.startAt) {
+    return false
+  }
+  if (activePhaseIndex.value >= 0) {
+    return false
+  }
   const lastPhase = sortedPhases.value.at(-1)
-  return Boolean(lastPhase?.endAt) && todayStr() >= lastPhase.endAt
+  if (!lastPhase?.endAt) {
+    return false
+  }
+  return todayStr() >= lastPhase.endAt
 })
 
 const phaseMenuItems = computed(() => {
@@ -353,7 +374,7 @@ function summarizeConfig(config: DeviceConfig): string {
 }
 
 watch(
-  () => linkedController.value?.devices,
+  () => growDevices.value,
   (devices) => {
     if (devices) {
       for (const device of devices) {
@@ -368,7 +389,18 @@ watch(
 
 async function onToggle(deviceId: string, checked: boolean) {
   deviceToggles[deviceId] = checked
-  await store.sendDeviceCommand(deviceId, checked ? 'ON' : 'OFF')
+  if (!cycleId.value) {
+    return
+  }
+  try {
+    await store.sendDeviceCommand(deviceId, cycleId.value, checked ? 'ON' : 'OFF')
+  } catch (error) {
+    deviceToggles[deviceId] = !checked
+    const { message, status } = extractApiError(error, 'Device command failed')
+    if (status !== 0) {
+      toast.add({ detail: message, life: 5000, severity: 'error', summary: 'Command failed' })
+    }
+  }
 }
 
 async function reconcileGrowState(cycle: {
@@ -416,7 +448,23 @@ async function reconcileGrowState(cycle: {
   }
 
   if (cycle.isActive !== growActive) {
-    await store.updateGrowCycle(cycle.id, { isActive: growActive })
+    try {
+      await store.updateGrowCycle(cycle.id, { isActive: growActive })
+    } catch (error) {
+      const { message, status } = extractApiError(error, 'Failed to update grow cycle')
+      if (status === 409) {
+        toast.add({
+          detail:
+            'End the currently running grow on this controller before activating another one.',
+          life: 8000,
+          severity: 'error',
+          summary: 'Controller busy',
+        })
+      } else {
+        toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Update failed' })
+      }
+      return
+    }
     const idx = store.growCycles.findIndex((g) => g.id === cycle.id)
     if (idx !== -1) {
       store.growCycles[idx] = {
@@ -443,16 +491,6 @@ onMounted(async () => {
     const initialActive = initialPhases[activePhaseIndex.value] ?? initialPhases[0]
     if (initialActive?.id) {
       openPhasePanels.value = [initialActive.id]
-    }
-    if (cycle?.controllerId) {
-      const devices = await store.fetchDevices(cycle.controllerId)
-      const ctrl = store.controllers.find((c) => c.id === cycle.controllerId)
-      if (ctrl) {
-        ctrl.devices = devices
-      }
-      if (currentCycle.value?.controller) {
-        currentCycle.value.controller.devices = devices
-      }
     }
   }
 })
@@ -663,9 +701,9 @@ function statusSeverity(status?: string) {
     <Card>
       <template #title>Devices</template>
       <template #content>
-        <div v-if="linkedController?.devices?.length" class="device-grid">
+        <div v-if="growDevices.length" class="device-grid">
           <div
-            v-for="device in linkedController.devices"
+            v-for="device in growDevices"
             :key="device.id"
             class="device-tile"
             :class="{ active: deviceToggles[device.id!] }"
@@ -677,7 +715,7 @@ function statusSeverity(status?: string) {
             />
           </div>
         </div>
-        <div v-else class="empty-state">No devices configured for this controller.</div>
+        <div v-else class="empty-state">No devices configured for this grow cycle.</div>
       </template>
     </Card>
 
