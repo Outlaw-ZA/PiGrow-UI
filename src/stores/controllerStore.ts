@@ -1,8 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
-import type { Controller } from '../types/grow'
+import type { Controller, SensorSeed } from '../types/grow'
 import { API_BASE } from './apiBase'
+
+export interface CreateControllerPayload {
+  macAddress: string
+  name: string
+  ipAddress: string
+  sensors?: SensorSeed[]
+}
 
 export const useControllerStore = defineStore('controller', () => {
   const controllers = ref<Controller[]>([])
@@ -13,9 +20,10 @@ export const useControllerStore = defineStore('controller', () => {
     controllers.value = res.data
   }
 
-  async function createController(payload: Partial<Controller>) {
+  async function createController(payload: CreateControllerPayload) {
     const res = await axios.post(`${API_BASE}/controllers`, payload)
     controllers.value.push(res.data)
+    return res.data as Controller
   }
 
   async function updateController(id: string, payload: Partial<Controller>) {

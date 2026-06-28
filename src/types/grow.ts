@@ -18,6 +18,22 @@ export enum TriggerType {
   ALWAYS_OFF = 'ALWAYS_OFF',
 }
 
+export enum SensorType {
+  HUMIDITY = 'HUMIDITY',
+  TEMPERATURE = 'TEMPERATURE',
+  TEMP_HUMIDITY = 'TEMP_HUMIDITY',
+  CO2 = 'CO2',
+  PH = 'PH',
+  EC = 'EC',
+}
+
+export enum SensorProtocol {
+  I2C = 'I2C',
+  SPI = 'SPI',
+  UART = 'UART',
+  RS485 = 'RS485',
+}
+
 export interface Controller {
   id: string
   macAddress: string
@@ -25,6 +41,7 @@ export interface Controller {
   name: string
   status: 'ONLINE' | 'OFFLINE' | 'ERROR'
   growCycles?: GrowCycle[]
+  sensors?: Sensor[]
   createdAt: string
   updatedAt: string
 }
@@ -48,6 +65,28 @@ export interface DeviceSeed {
   pinNumber: number
   mqttTopic: string
   isActive?: boolean
+}
+
+export interface Sensor {
+  id: string
+  controllerId: string
+  name: string
+  type: SensorType
+  mqttTopic: string
+  pinNumbers: number[]
+  protocol: SensorProtocol
+  lastActive?: string | null
+  createdAt: string
+  updatedAt: string
+  localKey?: string
+}
+
+export interface SensorSeed {
+  name: string
+  type: SensorType
+  mqttTopic: string
+  pinNumbers: number[]
+  protocol: SensorProtocol
 }
 
 export interface GrowCycleListItem {

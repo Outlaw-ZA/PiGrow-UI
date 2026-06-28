@@ -28,7 +28,7 @@ List all registered controllers.
 
 ### `GET /api/controllers/:id`
 
-Get a controller with its currently-active grow cycles (each with their devices and active phase).
+Get a controller with its currently-active grow cycles (each with their devices and active phase) and its wired sensors.
 
 **Response `200`** — Controller plus:
 
@@ -40,6 +40,7 @@ Get a controller with its currently-active grow cycles (each with their devices 
     devices: Device[] // Per-grow device inventory
     phases: GrowPhase[] // Only the currently-active phase
   }> // Only cycles where isActive === true
+  sensors: Sensor[] // All sensors wired to this controller, ordered by createdAt asc
 }
 ```
 
@@ -49,7 +50,7 @@ No top-level `devices` on the controller — devices are now scoped to grow cycl
 
 ### `POST /api/controllers`
 
-Register a new controller (upserts by macAddress).
+Register a new controller (upserts by macAddress). Optionally seed sensors atomically on a fresh create.
 
 **Request body:**
 
@@ -58,10 +59,11 @@ Register a new controller (upserts by macAddress).
   macAddress: string // Pattern: ^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$
   name: string // max 100 chars
   ipAddress: string // IPv4 format
+  sensors?: SeedSensorInput[] // Atomic sensor seed (ignored on MAC re-register)
 }
 ```
 
-**Response `201`** — Full Controller object (with `status: "OFFLINE"` default).
+**Response `201`** — Full Controller object (with `status: "OFFLINE"` default and nested `sensors[]` on a fresh create).
 **`400`** — `{ error: "Failed to map controller network identity" }`
 
 ### `PUT /api/controllers/:id`
@@ -199,6 +201,121 @@ Remove a device.
 
 **Response `204`** — No body.
 **`404`** — `{ error: "Hardware profile deletion failed" }`
+
+---
+
+## Sensors (GPIO Probes)
+
+Sensors are scoped to a **Controller** (physical Pi hub), not a grow cycle. They are hardware probes wired to the Pi and shared across the controller's lifetime. Devices, by contrast, are scoped per-grow cycle. Deleting a sensor cascades to its telemetry history.
+
+Where `SensorType` is one of:
+`"HUMIDITY" | "TEMPERATURE" | "TEMP_HUMIDITY" | "CO2" | "PH" | "EC"`
+
+And `SensorProtocol` is one of:
+`"I2C" | "SPI" | "UART" | "RS485"`
+
+### `GET /api/sensors/controller/:controllerId`
+
+List all sensors wired to a specific controller.
+
+**Response `200`** — Array of:
+
+```ts
+{
+  id: string
+  controllerId: string
+  name: string // e.g., "Tent 1 Climate Sensor"
+  type: SensorType
+  mqttTopic: string // e.g., "tent1/sensors/climate/state"
+  pinNumbers: number[] // Array of physical pin numbers 0–40
+  protocol: SensorProtocol
+  lastActive: string | null // ISO 8601, server-managed
+  createdAt: string // ISO 8601
+  updatedAt: string // ISO 8601
+}
+```
+
+**`400`** — `{ error: "Failed to load sensor inventory" }`
+
+### `GET /api/sensors/:id`
+
+Get a single sensor with its parent controller.
+
+**Response `200`** — Sensor plus:
+
+```ts
+{
+  // ...all Sensor fields above...
+  controller: {
+    id: string
+    name: string
+    status: 'ONLINE' | 'OFFLINE' | 'ERROR'
+  }
+}
+```
+
+**`404`** — `{ error: "Sensor not found" }`
+
+### `POST /api/sensors`
+
+Provision a new sensor on an existing controller.
+
+**Request body:**
+
+```ts
+{
+  controllerId: string;     // UUID
+  name: string;             // max 100 chars
+  type: SensorType;
+  mqttTopic: string;        // max 200 chars
+  pinNumbers: number[];     // integers 0–40
+  protocol: SensorProtocol;
+}
+```
+
+**Response `201`** — Full Sensor object.
+**`400`** — `{ error: "Failed to register sensor" }`
+
+### `PUT /api/sensors/:id`
+
+Update sensor configuration.
+
+**Request body:**
+
+```ts
+{
+  name?: string;            // max 100 chars
+  type?: SensorType;
+  mqttTopic?: string;       // max 200 chars
+  pinNumbers?: number[];    // integers 0–40
+  protocol?: SensorProtocol;
+  lastActive?: string;      // ISO 8601 — server-managed in the normal flow
+}
+```
+
+**Response `200`** — Updated Sensor object.
+**`400`** — `{ error: "Failed to update sensor configuration" }`
+
+### `DELETE /api/sensors/:id`
+
+Remove a sensor (cascades to its telemetry rows).
+
+**Response `204`** — No body.
+**`404`** — `{ error: "Sensor deletion failed" }`
+
+### Sensor seeding on controller create
+
+`POST /api/controllers` accepts an optional `sensors` array of `SeedSensorInput` (same shape as `POST /api/sensors` minus `controllerId`) to atomically seed sensors on a fresh controller. **Sensor seeding is ignored when the controller's `macAddress` already exists** (the controller is upserted by MAC and sensors are not mutated on re-registration).
+
+```ts
+// POST /api/controllers
+{
+  macAddress: string;
+  name: string;
+  ipAddress: string;
+  sensors?: SeedSensorInput[]; // [{ name, type, mqttTopic, pinNumbers, protocol }, ...]
+}
+```
 
 ---
 
@@ -494,6 +611,9 @@ type DeviceType =
 
 type TriggerType = 'SCHEDULE' | 'THRESHOLD' | 'ALWAYS_ON' | 'ALWAYS_OFF'
 
+type SensorType = 'HUMIDITY' | 'TEMPERATURE' | 'TEMP_HUMIDITY' | 'CO2' | 'PH' | 'EC'
+type SensorProtocol = 'I2C' | 'SPI' | 'UART' | 'RS485'
+
 // Models
 interface Controller {
   id: string
@@ -501,6 +621,22 @@ interface Controller {
   ipAddress: string
   name: string
   status: 'ONLINE' | 'OFFLINE' | 'ERROR'
+  createdAt: string
+  updatedAt: string
+  // Nested on GET /api/controllers/:id:
+  //   growCycles: GrowCycle[] (only active cycles; each with devices + active phase)
+  //   sensors: Sensor[] (all sensors wired to this controller)
+}
+
+interface Sensor {
+  id: string
+  controllerId: string
+  name: string
+  type: SensorType
+  mqttTopic: string
+  pinNumbers: number[] // Physical pin numbers 0–40
+  protocol: SensorProtocol
+  lastActive: string | null
   createdAt: string
   updatedAt: string
 }

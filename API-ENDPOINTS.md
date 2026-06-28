@@ -9,11 +9,36 @@ Based on the Prisma schema and FE codebase analysis. All IDs are UUIDv4. Request
 | Method   | Endpoint                         | FE Scenario                                                           |
 | -------- | -------------------------------- | --------------------------------------------------------------------- |
 | `GET`    | `/api/controllers`               | HomeView dashboard, AdminView list                                    |
-| `GET`    | `/api/controllers/:id`           | ControllerFormView edit mode (load with devices + active grow cycles) |
-| `POST`   | `/api/controllers`               | ControllerFormView create                                             |
+| `GET`    | `/api/controllers/:id`           | ControllerFormView edit mode (load with sensors + active grow cycles) |
+| `POST`   | `/api/controllers`               | ControllerFormView create (optionally seed `sensors[]` atomically)    |
 | `PUT`    | `/api/controllers/:id`           | ControllerFormView edit save                                          |
 | `DELETE` | `/api/controllers/:id`           | AdminView delete                                                      |
 | `PATCH`  | `/api/controllers/:id/heartbeat` | Pi status reporting (ONLINE/OFFLINE)                                  |
+
+---
+
+## Sensors
+
+Sensors are scoped to a **Controller** (physical Pi hub), not a grow cycle — they are hardware probes wired to the Pi and shared across its lifetime. Devices, by contrast, are scoped per-grow cycle.
+
+| Method   | Endpoint                                | FE Scenario                                                                |
+| -------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| `GET`    | `/api/sensors/controller/:controllerId` | ControllerFormView Sensors tab (also nested in `GET /api/controllers/:id`) |
+| `GET`    | `/api/sensors/:id`                      | Sensor detail (with controller { id, name, status })                       |
+| `POST`   | `/api/sensors`                          | ControllerFormView add sensor to existing controller                       |
+| `PUT`    | `/api/sensors/:id`                      | ControllerFormView edit sensor                                             |
+| `DELETE` | `/api/sensors/:id`                      | ControllerFormView remove sensor (cascades telemetry)                      |
+
+`POST /api/controllers` also accepts `sensors: SeedSensorInput[]` to atomically seed sensors on a fresh controller create (ignored on a MAC re-register). See [Grow Cycle Creation](#grow-cycle-creation) for the parallel pattern.
+
+### Sensor enums
+
+```ts
+type SensorType = 'HUMIDITY' | 'TEMPERATURE' | 'TEMP_HUMIDITY' | 'CO2' | 'PH' | 'EC'
+type SensorProtocol = 'I2C' | 'SPI' | 'UART' | 'RS485'
+```
+
+`pinNumbers` is an array of integers in the range `0–40` representing physical pins on the Pi's 40-pin GPIO header.
 
 ---
 
