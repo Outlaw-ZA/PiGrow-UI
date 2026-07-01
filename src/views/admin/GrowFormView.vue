@@ -1329,7 +1329,7 @@ function fmtTime(dayStartMinutes: number): string {
         <i class="pi pi-spin pi-spinner" /> Loading environment…
       </div>
       <div v-else class="form-stack">
-        <div class="env-form-grid env-form-grid--dual">
+        <div class="env-form-grid">
           <div v-for="period in ['DAY', 'NIGHT'] as const" :key="period" class="env-form-group">
             <div class="env-form-group-header">
               <h5 class="env-form-group-title">{{ period }}</h5>
@@ -1828,18 +1828,6 @@ function fmtTime(dayStartMinutes: number): string {
 
 .field-row-3 .field {
   gap: var(--space-1);
-}
-
-.env-form-grid--dual {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
-@media (max-width: 640px) {
-  .env-form-grid--dual {
-    grid-template-columns: 1fr;
-  }
 }
 
 .env-form-group-header {
