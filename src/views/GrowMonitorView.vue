@@ -327,7 +327,7 @@ watch(activePhaseIndex, () => {
 })
 
 // Wall-clock period detection — tick once a minute so the "Active now" badge flips
-// at the schedule boundary without a page reload.
+// At the schedule boundary without a page reload.
 const nowTick = ref(Date.now())
 let envTickHandle: ReturnType<typeof setInterval> | null = null
 
@@ -361,7 +361,9 @@ function envFor(period: 'DAY' | 'NIGHT'): PhaseEnvironment | null {
 }
 
 function fmtRange(min: number | null, max: number | null): string {
-  if (min == null && max == null) return '—'
+  if (min == null && max == null) {
+    return '—'
+  }
   return `${min ?? '—'}\u2013${max ?? '—'}`
 }
 function fmtTarget(t: number | null): string {

@@ -4,7 +4,7 @@ import Select from 'primevue/select'
 import InputNumber from 'primevue/inputnumber'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import { DeviceAction, DeviceType, DayNightPeriod, RuleCondition, SensorType } from '../types/grow'
+import { DayNightPeriod, DeviceAction, DeviceType, RuleCondition, SensorType } from '../types/grow'
 import type {
   AutomationRule,
   CreateAutomationRulePayload,
