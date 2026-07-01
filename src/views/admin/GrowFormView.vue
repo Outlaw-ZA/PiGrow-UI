@@ -1318,7 +1318,7 @@ function fmtTime(dayStartMinutes: number): string {
 
     <!-- Environment edit dialog (combined Day + Night) -->
     <Dialog
-      v-model="showEnvForm"
+      v-model:visible="showEnvForm"
       :header="`Environment — ${envEditingPhase?.name ?? ''}`"
       :style="{ width: '90vw', maxWidth: '800px' }"
       modal
