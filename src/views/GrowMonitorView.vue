@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
-import type { Device, DeviceConfig, GrowPhase } from '../types/grow'
-import { TriggerType } from '../types/grow'
+import type { Device, GrowPhase, PhaseEnvironment } from '../types/grow'
 import {
   addDays,
   daysBetween,
@@ -12,22 +11,12 @@ import {
   deriveGrowActive,
   todayStr,
 } from '../utils/growDates'
-import {
-  TRIGGER_TYPE_LABEL,
-  TRIGGER_TYPE_SEVERITY,
-  formatConfigSummary,
-  normalizeThresholdConfig,
-} from '../utils/deviceConfigs'
 import { extractApiError } from '../utils/errors'
 import { useToast } from 'primevue/usetoast'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import ToggleSwitch from 'primevue/toggleswitch'
-import Accordion from 'primevue/accordion'
-import AccordionPanel from 'primevue/accordionpanel'
-import AccordionHeader from 'primevue/accordionheader'
-import AccordionContent from 'primevue/accordioncontent'
 import Menu from 'primevue/menu'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useConfirm } from 'primevue/useconfirm'
@@ -44,7 +33,6 @@ const currentCycle = computed(
     store.growCycles.find((g) => g.id === cycleId.value) as
       | ((typeof store.growCycles)[number] & {
           phases?: GrowPhase[]
-          devices?: Device[]
           controller?: (typeof store.controllers)[number]
         })
       | undefined,
@@ -58,7 +46,16 @@ const linkedController = computed(() => {
   return store.controllers.find((c) => c.id === cycle.controllerId) || (cycle.controller ?? null)
 })
 
-const growDevices = computed<Device[]>(() => currentCycle.value?.devices ?? [])
+const linkedControllerDevices = computed<Device[]>(
+  () =>
+    (
+      store.controllers.find((c) => c.id === linkedController.value?.id) as
+        | ((typeof store.controllers)[number] & { devices?: Device[] })
+        | undefined
+    )?.devices ?? [],
+)
+
+const growDevices = computed<Device[]>(() => linkedControllerDevices.value)
 
 const sortedPhases = computed(() => {
   const phases = currentCycle.value?.phases
@@ -99,8 +96,6 @@ const elapsedDays = computed(() => {
 })
 
 const deviceToggles = reactive<Record<string, boolean>>({})
-
-const openPhasePanels = ref<string[]>([])
 
 const confirm = useConfirm()
 const phaseMenu = useTemplateRef<InstanceType<typeof Menu>>('phaseMenu')
@@ -229,10 +224,6 @@ async function executeEndGrow() {
   }
 }
 
-function phaseDeviceCount(phase: GrowPhase): number {
-  return phase.deviceConfigs?.length ?? 0
-}
-
 const activePhaseName = computed(() => {
   if (isGrowComplete.value) {
     return 'Complete'
@@ -300,77 +291,81 @@ const co2Ppm = ref(1000)
 const ecMs = ref(800)
 const phValue = ref(6)
 
-function metricToValue(metric: string): number | null {
-  const m = metric.toUpperCase()
-  if (m === 'TEMP' || m === 'TEMPERATURE') {
-    return temperatureC.value
-  }
-  if (m === 'HUMIDITY') {
-    return humidityPercent.value
-  }
-  if (m === 'CO2') {
-    return co2Ppm.value
-  }
-  if (m === 'EC') {
-    return ecMs.value
-  }
-  if (m === 'PH') {
-    return phValue.value
-  }
-  return null
+// ---------- Active phase environment (Day/Night targets) ----------
+
+const MINUTES_PER_HOUR_ENV = 60
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR_ENV
+const DEFAULT_DAY_START_MINUTES = 6 * MINUTES_PER_HOUR_ENV
+const DEFAULT_DAY_DURATION_MINUTES = 18 * MINUTES_PER_HOUR_ENV
+
+interface ActiveEnvState {
+  day: PhaseEnvironment | null
+  night: PhaseEnvironment | null
+  loading: boolean
 }
 
-const METRIC_DISPLAY: Record<string, { label: string; unit: string }> = {
-  CO2: { label: 'CO₂', unit: 'ppm' },
-  EC: { label: 'Water EC', unit: 'ppm' },
-  HUMIDITY: { label: 'Humidity', unit: '%' },
-  PH: { label: 'Water pH', unit: '' },
-  TEMP: { label: 'Temperature', unit: '°C' },
-  TEMPERATURE: { label: 'Temperature', unit: '°C' },
-}
+const activeEnv = ref<ActiveEnvState>({ day: null, loading: false, night: null })
 
-function formatAlert(metric: string, current: number, threshold: number): string {
-  const info = METRIC_DISPLAY[metric.toUpperCase()] ?? { label: metric, unit: '' }
-  return `${info.label} ${current}${info.unit} exceeds ${threshold}${info.unit} threshold`
-}
-
-const alerts = computed(() => {
+async function loadActivePhaseEnv() {
   const idx = activePhaseIndex.value
-  if (idx < 0) {
-    return []
+  const phase = idx >= 0 ? sortedPhases.value[idx] : null
+  if (!phase?.id) {
+    activeEnv.value = { day: null, loading: false, night: null }
+    return
   }
-  const phase = sortedPhases.value[idx]
-  if (!phase?.deviceConfigs) {
-    return []
+  activeEnv.value = { ...activeEnv.value, loading: true }
+  try {
+    const data = await store.fetchPhaseEnvironment(phase.id)
+    activeEnv.value = { day: data.day, loading: false, night: data.night }
+  } catch {
+    activeEnv.value = { ...activeEnv.value, loading: false }
   }
-  const result: { key: string; message: string }[] = []
-  for (const cfg of phase.deviceConfigs) {
-    if (cfg.triggerType !== TriggerType.THRESHOLD) {
-      continue
-    }
-    if (!cfg.id) {
-      continue
-    }
-    const { metric, high } = normalizeThresholdConfig(cfg.configData as Record<string, unknown>)
-    if (!metric) {
-      continue
-    }
-    const current = metricToValue(metric)
-    if (current === null) {
-      continue
-    }
-    if (current > high) {
-      result.push({ key: cfg.id, message: formatAlert(metric, current, high) })
-    }
-  }
-  return result
+}
+
+watch(activePhaseIndex, () => {
+  loadActivePhaseEnv()
 })
 
-function summarizeConfig(config: DeviceConfig): string {
-  return formatConfigSummary(
-    config.triggerType as TriggerType,
-    config.configData as Record<string, unknown>,
-  )
+// Wall-clock period detection — tick once a minute so the "Active now" badge flips
+// at the schedule boundary without a page reload.
+const nowTick = ref(Date.now())
+let envTickHandle: ReturnType<typeof setInterval> | null = null
+
+const currentMinutesIntoDay = computed(() => {
+  // Read nowTick so this computed re-evaluates on the 60s interval.
+  void nowTick.value
+  const now = new Date()
+  return now.getHours() * MINUTES_PER_HOUR_ENV + now.getMinutes()
+})
+
+const activePeriod = computed<'DAY' | 'NIGHT'>(() => {
+  const idx = activePhaseIndex.value
+  const phase = idx >= 0 ? sortedPhases.value[idx] : null
+  const start = phase?.dayStartMinutes ?? DEFAULT_DAY_START_MINUTES
+  const duration = phase?.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES
+  const cur = currentMinutesIntoDay.value
+  const end = start + duration
+  if (end <= MINUTES_PER_DAY) {
+    return cur >= start && cur < end ? 'DAY' : 'NIGHT'
+  }
+  // Wrap-around (e.g. day starts 22:00, duration 12h → end = 1380, wraps to 10:00).
+  return cur >= start || cur < end - MINUTES_PER_DAY ? 'DAY' : 'NIGHT'
+})
+
+const activeEnvConfigured = computed(
+  () => activeEnv.value.day !== null || activeEnv.value.night !== null,
+)
+
+function envFor(period: 'DAY' | 'NIGHT'): PhaseEnvironment | null {
+  return period === 'DAY' ? activeEnv.value.day : activeEnv.value.night
+}
+
+function fmtRange(min: number | null, max: number | null): string {
+  if (min == null && max == null) return '—'
+  return `${min ?? '—'}\u2013${max ?? '—'}`
+}
+function fmtTarget(t: number | null): string {
+  return t == null ? '—' : String(t)
 }
 
 watch(
@@ -389,11 +384,12 @@ watch(
 
 async function onToggle(deviceId: string, checked: boolean) {
   deviceToggles[deviceId] = checked
-  if (!cycleId.value) {
+  const controllerId = linkedController.value?.id
+  if (!controllerId) {
     return
   }
   try {
-    await store.sendDeviceCommand(deviceId, cycleId.value, checked ? 'ON' : 'OFF')
+    await store.sendDeviceCommand(deviceId, controllerId, checked ? 'ON' : 'OFF')
   } catch (error) {
     deviceToggles[deviceId] = !checked
     const { message, status } = extractApiError(error, 'Device command failed')
@@ -476,6 +472,9 @@ async function reconcileGrowState(cycle: {
 }
 
 onMounted(async () => {
+  envTickHandle = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 60_000)
   if (cycleId.value) {
     const cycle = await store.fetchGrowCycle(cycleId.value)
     if (cycle?.controller) {
@@ -486,12 +485,18 @@ onMounted(async () => {
         store.controllers.push(cycle.controller)
       }
     }
-    await reconcileGrowState(cycle)
-    const initialPhases = sortedPhases.value
-    const initialActive = initialPhases[activePhaseIndex.value] ?? initialPhases[0]
-    if (initialActive?.id) {
-      openPhasePanels.value = [initialActive.id]
+    if (cycle?.controllerId) {
+      await store.fetchDevices(cycle.controllerId)
     }
+    await reconcileGrowState(cycle)
+    await loadActivePhaseEnv()
+  }
+})
+
+onUnmounted(() => {
+  if (envTickHandle) {
+    clearInterval(envTickHandle)
+    envTickHandle = null
   }
 })
 
@@ -572,17 +577,6 @@ function statusSeverity(status?: string) {
       </template>
     </Card>
 
-    <Card v-if="alerts.length" class="alerts-card">
-      <template #content>
-        <div class="alerts-list">
-          <div v-for="alert in alerts" :key="alert.key" class="alert-item">
-            <i class="pi pi-exclamation-triangle alert-icon"></i>
-            <span class="alert-message">{{ alert.message }}</span>
-          </div>
-        </div>
-      </template>
-    </Card>
-
     <Card>
       <template #title>Climate</template>
       <template #content>
@@ -630,6 +624,83 @@ function statusSeverity(status?: string) {
                 {{ phValue }}<span class="hero-metric-unit">pH</span>
               </span>
               <span class="hero-metric-label">Water pH</span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
+
+    <Card>
+      <template #title>
+        <div class="env-card-title">
+          <span>Environment — {{ activePhaseName }}</span>
+          <Tag
+            v-if="activePhaseIndex >= 0 && activeEnvConfigured"
+            :value="activePeriod"
+            severity="success"
+            rounded
+            v-tooltip.top="'Currently active day/night period'"
+          />
+        </div>
+      </template>
+      <template #content>
+        <div v-if="activeEnv.loading" class="env-loading">
+          <i class="pi pi-spin pi-spinner" /> Loading environment…
+        </div>
+        <div v-else-if="!activeEnvConfigured" class="empty-state">
+          No environment configured for this phase.
+        </div>
+        <div v-else class="env-stack">
+          <div
+            v-for="period in ['DAY', 'NIGHT'] as const"
+            :key="period"
+            class="env-block"
+            :class="{ 'env-block--active': period === activePeriod }"
+          >
+            <div class="env-block-header">
+              <span class="env-block-title">{{ period }}</span>
+              <Tag v-if="period === activePeriod" value="Active now" severity="success" rounded />
+            </div>
+            <div class="env-block-rows">
+              <div class="env-row">
+                <span class="env-row-label">Temperature</span>
+                <span class="env-row-target"
+                  >{{ fmtTarget(envFor(period)?.tempTarget ?? null) }} °C</span
+                >
+                <span class="env-row-range"
+                  >{{
+                    fmtRange(envFor(period)?.tempMin ?? null, envFor(period)?.tempMax ?? null)
+                  }}
+                  °C</span
+                >
+              </div>
+              <div class="env-row">
+                <span class="env-row-label">Humidity</span>
+                <span class="env-row-target"
+                  >{{ fmtTarget(envFor(period)?.humidityTarget ?? null) }} %</span
+                >
+                <span class="env-row-range"
+                  >{{
+                    fmtRange(
+                      envFor(period)?.humidityMin ?? null,
+                      envFor(period)?.humidityMax ?? null,
+                    )
+                  }}
+                  %</span
+                >
+              </div>
+              <div class="env-row">
+                <span class="env-row-label">CO₂</span>
+                <span class="env-row-target"
+                  >{{ fmtTarget(envFor(period)?.co2Target ?? null) }} ppm</span
+                >
+                <span class="env-row-range"
+                  >{{
+                    fmtRange(envFor(period)?.co2Min ?? null, envFor(period)?.co2Max ?? null)
+                  }}
+                  ppm</span
+                >
+              </div>
             </div>
           </div>
         </div>
@@ -716,78 +787,6 @@ function statusSeverity(status?: string) {
           </div>
         </div>
         <div v-else class="empty-state">No devices configured for this grow cycle.</div>
-      </template>
-    </Card>
-
-    <Card>
-      <template #title>Phase Configuration</template>
-      <template #content>
-        <div v-if="sortedPhases.length" class="phase-config-accordion">
-          <Accordion v-model:value="openPhasePanels" multiple>
-            <AccordionPanel v-for="phase in sortedPhases" :key="phase.id" :value="phase.id">
-              <AccordionHeader>
-                <div class="phase-config-header">
-                  <div class="phase-config-header-left">
-                    <span class="phase-config-order">{{ phase.order }}</span>
-                    <div class="phase-config-meta">
-                      <span class="phase-config-name" :class="{ active: phase.isActive }">
-                        {{ phase.name }}
-                      </span>
-                      <span class="phase-config-sub">
-                        {{ phase.durationDays }} day{{ phase.durationDays !== 1 ? 's' : '' }} ·
-                        {{ phaseDeviceCount(phase) }}
-                        config{{ phaseDeviceCount(phase) !== 1 ? 's' : '' }}
-                      </span>
-                    </div>
-                  </div>
-                  <div class="phase-config-header-right">
-                    <Tag v-if="phase.isActive" value="Active" severity="success" rounded />
-                    <span v-if="phase.startAt && phase.endAt" class="phase-config-dates">
-                      {{ phase.startAt }} → {{ phase.endAt }}
-                    </span>
-                  </div>
-                </div>
-              </AccordionHeader>
-              <AccordionContent>
-                <div v-if="phase.deviceConfigs && phase.deviceConfigs.length" class="config-list">
-                  <div v-for="cfg in phase.deviceConfigs" :key="cfg.id" class="config-item">
-                    <div class="config-item-left">
-                      <div class="config-item-device">
-                        <span class="config-device-name">
-                          {{ cfg.device?.name ?? 'Unknown device' }}
-                        </span>
-                        <span v-if="cfg.device?.type" class="type-pill">
-                          {{ cfg.device.type.replace(/_/g, ' ') }}
-                        </span>
-                      </div>
-                      <div v-if="cfg.device" class="config-item-meta">
-                        <code class="meta-code">GPIO {{ cfg.device.pinNumber }}</code>
-                        <code class="meta-code">{{ cfg.device.mqttTopic }}</code>
-                      </div>
-                    </div>
-                    <div class="config-item-right">
-                      <Tag
-                        :value="cfg.device?.isActive ? 'Armed' : 'Disarmed'"
-                        :severity="cfg.device?.isActive ? 'success' : 'secondary'"
-                        rounded
-                      />
-                      <Tag
-                        :value="TRIGGER_TYPE_LABEL[cfg.triggerType as TriggerType]"
-                        :severity="TRIGGER_TYPE_SEVERITY[cfg.triggerType as TriggerType]"
-                        rounded
-                      />
-                      <code class="config-summary">
-                        {{ summarizeConfig(cfg) }}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="config-empty">No device configurations for this phase.</div>
-              </AccordionContent>
-            </AccordionPanel>
-          </Accordion>
-        </div>
-        <div v-else class="empty-state">No phases configured for this grow cycle.</div>
       </template>
     </Card>
   </div>
@@ -1038,37 +1037,94 @@ function statusSeverity(status?: string) {
   font-weight: 500;
 }
 
-.alerts-card {
-  border-top: 2px solid var(--color-warning);
-}
-
-.alerts-card :deep(.p-card-body) {
-  padding: var(--space-3) var(--space-5);
-  background: var(--color-warning-bg);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-}
-
-.alerts-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.alert-item {
+.env-card-title {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
-.alert-icon {
-  color: var(--color-warning);
-  font-size: var(--text-md);
-  flex-shrink: 0;
+.env-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-2) 0;
 }
 
-.alert-message {
-  font-size: var(--text-md);
+.env-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.env-block {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-left-width: 3px;
+  transition:
+    border-color var(--duration-normal) var(--ease-default),
+    background var(--duration-normal) var(--ease-default);
+}
+
+.env-block--active {
+  border-left-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 6%, var(--color-bg-elevated));
+}
+
+.env-block-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.env-block-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.env-block-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.env-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.env-row-label {
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.env-row-target {
+  font-weight: 700;
   color: var(--color-text-primary);
+  font-family: var(--font-mono);
+}
+
+.env-row-range {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 767px) {
@@ -1085,17 +1141,6 @@ function statusSeverity(status?: string) {
   .climate-grid {
     width: 100%;
   }
-}
-
-.type-pill {
-  text-transform: capitalize;
-  padding: 0.1875rem 0.5rem;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  border: 1px solid var(--color-border);
 }
 
 .empty-state {
@@ -1308,177 +1353,6 @@ function statusSeverity(status?: string) {
   color: var(--color-danger);
   font-weight: 500;
   margin: 0 0 var(--space-4) 0;
-}
-
-.phase-config-accordion :deep(.p-accordionpanel) {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-bg-elevated);
-  overflow: hidden;
-  margin-bottom: var(--space-2);
-}
-
-.phase-config-accordion :deep(.p-accordionpanel:last-child) {
-  margin-bottom: 0;
-}
-
-.phase-config-accordion :deep(.p-accordionheader) {
-  padding: var(--space-3) var(--space-4);
-  background: transparent;
-  border: none;
-}
-
-.phase-config-accordion :deep(.p-accordionheader:hover) {
-  background: var(--color-bg-hover);
-}
-
-.phase-config-accordion :deep(.p-accordioncontent-content) {
-  padding: 0 var(--space-4) var(--space-4) var(--space-4);
-  background: transparent;
-  border: none;
-}
-
-.phase-config-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  width: 100%;
-}
-
-.phase-config-header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.phase-config-order {
-  background: var(--color-info);
-  color: #ffffff;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-sm);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.phase-config-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.phase-config-name {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.phase-config-name.active {
-  color: var(--color-text-primary);
-}
-
-.phase-config-sub {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-}
-
-.phase-config-header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.phase-config-dates {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-}
-
-.config-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border-subtle);
-}
-
-.config-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  flex-wrap: wrap;
-}
-
-.config-item-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.config-item-device {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.config-item-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.config-device-name {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--color-text-secondary);
-}
-
-.config-item-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.config-summary {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--color-text-primary);
-  background: var(--color-code-bg);
-  padding: 0.1875rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  white-space: nowrap;
-}
-
-.config-empty {
-  padding: var(--space-4) 0 var(--space-2) 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  text-align: center;
-  font-style: italic;
 }
 
 .phase-card-title {
