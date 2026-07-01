@@ -2,8 +2,23 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../../stores/apiStore'
-import type { Device, DeviceConfig, DeviceSeed, GrowPhase } from '../../types/grow'
-import { DeviceType, TriggerType } from '../../types/grow'
+import type {
+  AutomationRule,
+  CreateAutomationRulePayload,
+  Device,
+  GrowPhase,
+  PhaseEnvironment,
+  PhaseEnvironmentPayload,
+  UpdateAutomationRulePayload,
+} from '../../types/grow'
+import {
+  AutomationMode,
+  DayNightPeriod,
+  DeviceAction,
+  DeviceType,
+  RuleCondition,
+  SensorType,
+} from '../../types/grow'
 import {
   deriveActivePhaseIndex,
   deriveGrowActive,
@@ -11,17 +26,6 @@ import {
   parseDateOnly,
   recalculatePhaseDates,
 } from '../../utils/growDates'
-import {
-  TRIGGER_TYPE_LABEL,
-  TRIGGER_TYPE_OPTIONS,
-  TRIGGER_TYPE_SEVERITY,
-  buildConfigPayload,
-  defaultConfigForm,
-  formatConfigSummary,
-  normalizeScheduleConfig,
-  normalizeThresholdConfig,
-} from '../../utils/deviceConfigs'
-import type { ConfigFormState } from '../../utils/deviceConfigs'
 import { extractApiError } from '../../utils/errors'
 import { useToast } from 'primevue/usetoast'
 import InputText from 'primevue/inputtext'
@@ -40,16 +44,19 @@ import Tab from 'primevue/tab'
 import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import InputSwitch from 'primevue/inputswitch'
+import MultiSelect from 'primevue/multiselect'
 import Accordion from 'primevue/accordion'
 import AccordionPanel from 'primevue/accordionpanel'
 import AccordionHeader from 'primevue/accordionheader'
 import AccordionContent from 'primevue/accordioncontent'
-import GpioPinoutDiagram from '../../components/GpioPinoutDiagram.vue'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useConfirm } from 'primevue/useconfirm'
 
 const store = useApiStore()
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const confirm = useConfirm()
 
 const growId = computed(() => route.params.id as string | undefined)
 const isEditMode = computed(() => Boolean(growId.value))
@@ -61,8 +68,6 @@ const ready = ref(false)
 const saving = ref(false)
 const previousActivePhaseId = ref<string | null>(null)
 
-const stagedDevices = ref<Device[]>([])
-
 function recalculateDates() {
   recalculatePhaseDates(phases.value, growStartDate.value)
 }
@@ -73,138 +78,10 @@ const totalCycleDays = computed(() => phases.value.reduce((sum, p) => sum + p.du
 
 const sortedPhases = computed(() => [...phases.value].toSorted((a, b) => a.order - b.order))
 
-const selectedPhaseKey = ref<string | null>(null)
-const deviceConfigForms = ref<Record<string, ConfigFormState>>({})
-const onTimeDate = ref<Record<string, Date | null>>({})
-
-const growDevices = computed<Device[]>(() => {
-  if (isEditMode.value && growId.value) {
-    const cycle = store.growCycles.find((g) => g.id === growId.value) as
-      | ((typeof store.growCycles)[number] & { devices?: Device[] })
-      | undefined
-    return cycle?.devices ?? []
-  }
-  return stagedDevices.value
-})
-
-const selectedPhase = computed<GrowPhase | undefined>(() =>
-  phases.value.find((p) => p.localKey != null && p.localKey === selectedPhaseKey.value),
-)
-const selectablePhases = computed(() =>
-  sortedPhases.value
-    .filter((p) => p.localKey != null)
-    .map((p) => ({ key: p.localKey as string, name: p.name })),
-)
-
-const configRows = computed(() => {
-  const configs = selectedPhase.value?.deviceConfigs ?? []
-  return growDevices.value
-    .map((device) => {
-      const key = deviceKey(device)
-      const formState = deviceConfigForms.value[key]
-      const config = configs.find((c) => c.deviceId === deviceKey(device))
-      return { config, device, formState, key }
-    })
-    .filter(
-      (
-        row,
-      ): row is {
-        device: Device
-        formState: ConfigFormState
-        config: DeviceConfig | undefined
-        key: string
-      } => row.formState != null && row.key != null,
-    )
-})
-
-function deviceKey(device: Device): string {
-  return device.id || device.localKey || ''
-}
-
-function getForm(key: string): ConfigFormState {
-  const formState = deviceConfigForms.value[key]
-  if (!formState) {
-    deviceConfigForms.value[key] = defaultConfigForm()
-    return deviceConfigForms.value[key]!
-  }
-  return formState
-}
-
-function initDeviceConfigFormsForPhase(phase: GrowPhase | undefined) {
-  const next: Record<string, ConfigFormState> = {}
-  const nextTimes: Record<string, Date | null> = {}
-  const existing = phase?.deviceConfigs ?? []
-  for (const device of growDevices.value) {
-    const key = deviceKey(device)
-    if (!key) {
-      continue
-    }
-    const current = existing.find((c) => c.deviceId === deviceKey(device))
-    if (current) {
-      const { triggerType } = current
-      const form: ConfigFormState = {
-        ...defaultConfigForm(),
-        dirty: false,
-        id: current.id,
-        triggerType,
-      }
-      if (triggerType === TriggerType.SCHEDULE) {
-        const sched = normalizeScheduleConfig(current.configData)
-        form.onTime = sched.onTime
-        form.durationHours = sched.durationHours
-        nextTimes[key] = parseTimeOfDay(sched.onTime)
-      } else if (triggerType === TriggerType.THRESHOLD) {
-        const thresh = normalizeThresholdConfig(current.configData)
-        form.metric = thresh.metric
-        form.high = thresh.high
-      }
-      next[key] = form
-    } else {
-      const blank = defaultConfigForm()
-      next[key] = blank
-      nextTimes[key] = parseTimeOfDay(blank.onTime)
-    }
-  }
-  deviceConfigForms.value = next
-  onTimeDate.value = nextTimes
-}
-
-function parseTimeOfDay(hhmm: string): Date | null {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm)
-  if (!match) {
-    return null
-  }
-  const date = new Date()
-  date.setHours(Number(match[1]), Number(match[2]), 0, 0)
-  return date
-}
-
-function formatTimeOfDay(date: Date | null | undefined): string {
-  if (!date) {
-    return '00:00'
-  }
-  const h = String(date.getHours()).padStart(2, '0')
-  const m = String(date.getMinutes()).padStart(2, '0')
-  return `${h}:${m}`
-}
-
 let localKeySeq = 0
 function genLocalKey(prefix: string): string {
   return `${prefix}-${++localKeySeq}`
 }
-
-watch(selectedPhaseKey, () => {
-  initDeviceConfigFormsForPhase(selectedPhase.value)
-})
-
-watch(
-  () => growDevices.value.map((d) => deviceKey(d)).join('|'),
-  () => {
-    if (selectedPhaseKey.value) {
-      initDeviceConfigFormsForPhase(selectedPhase.value)
-    }
-  },
-)
 
 function getDefaultPhases(): GrowPhase[] {
   return [
@@ -216,6 +93,8 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Germination',
       order: 1,
       startAt: null,
+      dayStartMinutes: 360,
+      dayDurationMinutes: 1080,
     },
     {
       durationDays: 14,
@@ -225,6 +104,8 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Seedling',
       order: 2,
       startAt: null,
+      dayStartMinutes: 360,
+      dayDurationMinutes: 1080,
     },
     {
       durationDays: 28,
@@ -234,6 +115,8 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Vegetative',
       order: 3,
       startAt: null,
+      dayStartMinutes: 360,
+      dayDurationMinutes: 1080,
     },
     {
       durationDays: 56,
@@ -243,6 +126,8 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Flowering',
       order: 4,
       startAt: null,
+      dayStartMinutes: 360,
+      dayDurationMinutes: 1080,
     },
     {
       durationDays: 14,
@@ -252,6 +137,8 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Flush',
       order: 5,
       startAt: null,
+      dayStartMinutes: 360,
+      dayDurationMinutes: 1080,
     },
   ]
 }
@@ -294,8 +181,7 @@ async function loadExistingCycle(id: string) {
   recalculateDates()
   const previouslyActive = phases.value.find((p) => p.isActive && p.id)
   previousActivePhaseId.value = previouslyActive?.id ?? null
-  const firstPhase = phases.value[0]
-  selectedPhaseKey.value = firstPhase?.localKey ?? null
+  await store.fetchDevices(cycle.controllerId)
 }
 
 function isPhaseActive(phase: GrowPhase): boolean {
@@ -306,13 +192,7 @@ function isPhaseActive(phase: GrowPhase): boolean {
   return sortedPhases.value[activeIdx] === phase
 }
 
-const activeTab = ref<'details' | 'phases' | 'devices'>('details')
-
-const deviceConfigHint = computed(() =>
-  isEditMode.value
-    ? 'Edits save immediately per device.'
-    : 'Device configs are saved when you commit the grow.',
-)
+const activeTab = ref<'details' | 'phases'>('details')
 
 const showPhaseModal = ref(false)
 const editingPhaseIndex = ref<number | null>(null)
@@ -323,7 +203,59 @@ const phaseDraft = ref<GrowPhase>({
   name: '',
   order: 0,
   startAt: null,
+  dayStartMinutes: 360,
+  dayDurationMinutes: 1080,
 })
+
+function dayStartTime(dayStartMinutes: number): { hours: number; minutes: number } {
+  return {
+    hours: Math.floor(dayStartMinutes / 60),
+    minutes: dayStartMinutes % 60,
+  }
+}
+
+function minutesFromTime(hours: number, minutes: number): number {
+  return hours * 60 + minutes
+}
+
+const phaseDraftStartTime = computed(() => {
+  const mins = phaseDraft.value.dayStartMinutes ?? 360
+  return dayStartTime(mins)
+})
+
+const MINUTES_PER_HOUR = 60
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
+const DEFAULT_DAY_DURATION_MINUTES = 18 * MINUTES_PER_HOUR
+
+const phaseDraftDurationHours = computed({
+  get: () =>
+    Math.round(
+      (phaseDraft.value.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES) / MINUTES_PER_HOUR,
+    ),
+  set: (hours: number) => {
+    phaseDraft.value.dayDurationMinutes = hours * MINUTES_PER_HOUR
+  },
+})
+
+function phaseDayNight(phase: GrowPhase): {
+  startLabel: string
+  dayHours: number
+  nightHours: number
+} {
+  const dayMinutes = phase.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES
+  const nightMinutes = MINUTES_PER_DAY - dayMinutes
+  const dayHours = dayMinutes / MINUTES_PER_HOUR
+  const nightHours = nightMinutes / MINUTES_PER_HOUR
+  if (phase.dayStartMinutes === undefined) {
+    return { dayHours, nightHours, startLabel: '—' }
+  }
+  return { dayHours, nightHours, startLabel: fmtTime(phase.dayStartMinutes) }
+}
+
+function formatPhaseDayNight(phase: GrowPhase): string {
+  const { startLabel, dayHours, nightHours } = phaseDayNight(phase)
+  return `${startLabel} · ${dayHours}h day / ${nightHours}h night`
+}
 
 const phaseDraftDateRange = computed<{ start: string; end: string }>(() => {
   if (!phaseDraft.value.durationDays) {
@@ -354,6 +286,8 @@ function openAddPhase() {
     name: '',
     order: sortedPhases.value.length + 1,
     startAt: null,
+    dayStartMinutes: 360,
+    dayDurationMinutes: 1080,
   }
   showPhaseModal.value = true
 }
@@ -364,7 +298,11 @@ function openEditPhase(idx: number) {
     return
   }
   editingPhaseIndex.value = idx
-  phaseDraft.value = { ...phase }
+  phaseDraft.value = {
+    ...phase,
+    dayStartMinutes: phase.dayStartMinutes ?? 360,
+    dayDurationMinutes: phase.dayDurationMinutes ?? 1080,
+  }
   showPhaseModal.value = true
 }
 
@@ -403,180 +341,47 @@ async function removePhase(index: number) {
   recalculateDates()
 }
 
-function goToDevicesForPhaseFromRow(phase: GrowPhase) {
-  if (phase.localKey) {
-    selectedPhaseKey.value = phase.localKey
-    activeTab.value = 'devices'
-  }
-}
+const phaseDraftStartHours = ref(6)
+const phaseDraftStartMinutes = ref(0)
 
-const showConfigModal = ref(false)
-const editingDeviceKey = ref<string | null>(null)
-const modalForm = ref<ConfigFormState>(defaultConfigForm())
-const modalOnTime = ref<Date | null>(null)
-
-const configModalDevice = computed<Device | null>(() => {
-  if (!editingDeviceKey.value) {
-    return null
-  }
-  return growDevices.value.find((d) => deviceKey(d) === editingDeviceKey.value) ?? null
-})
-
-const configModalTitle = computed(() => {
-  const dev = configModalDevice.value
-  return dev ? `Configure ${dev.name}` : 'Configure device'
-})
-
-const configModalSubtitle = computed(() => {
-  const dev = configModalDevice.value
-  if (!dev || !selectedPhase.value) {
-    return ''
-  }
-  return `${selectedPhase.value.name} · ${dev.type.replaceAll('_', ' ')}`
-})
-
-const editingDeviceHasConfig = computed(() => {
-  const key = editingDeviceKey.value
-  if (!key) {
-    return false
-  }
-  const dev = growDevices.value.find((d) => deviceKey(d) === key)
-  if (!dev) {
-    return false
-  }
-  const ref = deviceKey(dev)
-  return Boolean(selectedPhase.value?.deviceConfigs?.some((c) => c.deviceId === ref))
-})
-
-function getTriggerLabel(config: DeviceConfig): string {
-  return TRIGGER_TYPE_LABEL[config.triggerType]
-}
-
-function getTriggerSeverity(config: DeviceConfig): 'info' | 'warn' | 'success' | 'secondary' {
-  return TRIGGER_TYPE_SEVERITY[config.triggerType]
-}
-
-function openConfigModal(key: string) {
-  const existing = getForm(key)
-  modalForm.value = { ...existing }
-  modalOnTime.value = onTimeDate.value[key] ?? parseTimeOfDay(existing.onTime)
-  editingDeviceKey.value = key
-  showConfigModal.value = true
-}
-
-function closeConfigModal() {
-  showConfigModal.value = false
-  editingDeviceKey.value = null
-}
-
-async function saveConfigFromModal() {
-  const key = editingDeviceKey.value
-  if (!key) {
-    return
-  }
-  if (modalOnTime.value) {
-    modalForm.value.onTime = formatTimeOfDay(modalOnTime.value)
-  }
-  const real = deviceConfigForms.value[key]
-  if (real) {
-    Object.assign(real, modalForm.value)
-  }
-  onTimeDate.value[key] = modalOnTime.value
-  await saveDeviceConfig(key)
-  closeConfigModal()
-}
-
-async function deleteConfigFromModal() {
-  const key = editingDeviceKey.value
-  if (!key) {
-    return
-  }
-  await removeDeviceConfig(key)
-  closeConfigModal()
-}
-
-const showDeviceModal = ref(false)
-const deviceForm = ref({ isActive: true, mqttTopic: '', name: '', pinNumber: '', type: '' })
-const openPinoutPanels = ref<string[]>([])
-
-const deviceTypeOptions = Object.values(DeviceType).map((t) => ({
-  label: t.replaceAll('_', ' '),
-  value: t,
-}))
-
-function openAddDevice() {
-  deviceForm.value = { isActive: true, mqttTopic: '', name: '', pinNumber: '', type: '' }
-  openPinoutPanels.value = []
-  showDeviceModal.value = true
-}
-
-function closeDeviceModal() {
-  showDeviceModal.value = false
-}
-
-async function saveDevice() {
-  const { controllerId } = form.value
-  if (!controllerId) {
-    return
-  }
-  const seed: DeviceSeed = {
-    isActive: deviceForm.value.isActive,
-    mqttTopic: deviceForm.value.mqttTopic,
-    name: deviceForm.value.name,
-    pinNumber: Number(deviceForm.value.pinNumber),
-    type: deviceForm.value.type as DeviceType,
-  }
-  try {
-    if (isEditMode.value && growId.value) {
-      await store.createDevice({ growCycleId: growId.value, ...seed })
-      await store.fetchDevices(growId.value)
-    } else {
-      stagedDevices.value.push({
-        ...seed,
-        controllerId: '',
-        createdAt: '',
-        growCycleId: '',
-        id: '',
-        isActive: seed.isActive ?? true,
-        localKey: genLocalKey('device'),
-        mqttTopic: seed.mqttTopic,
-        name: seed.name,
-        pinNumber: seed.pinNumber,
-        type: seed.type,
-        updatedAt: '',
-      } as Device)
+watch(
+  () => showPhaseModal.value,
+  (visible) => {
+    if (visible) {
+      const t = dayStartTime(phaseDraft.value.dayStartMinutes ?? 360)
+      phaseDraftStartHours.value = t.hours
+      phaseDraftStartMinutes.value = t.minutes
     }
-    closeDeviceModal()
-  } catch (error) {
-    console.error('Failed to create device', error)
-  }
-}
+  },
+)
 
-function removeStagedDevice(localKey: string) {
-  stagedDevices.value = stagedDevices.value.filter((d) => d.localKey !== localKey)
+function applyTimeToPhaseDraft() {
+  phaseDraft.value.dayStartMinutes = minutesFromTime(
+    phaseDraftStartHours.value,
+    phaseDraftStartMinutes.value,
+  )
 }
 
 async function savePhase(phase: GrowPhase, cycleId?: string): Promise<GrowPhase | null> {
+  const payload = {
+    durationDays: phase.durationDays,
+    endAt: phase.endAt,
+    isActive: phase.isActive,
+    name: phase.name,
+    order: phase.order,
+    startAt: phase.startAt,
+    dayStartMinutes: phase.dayStartMinutes,
+    dayDurationMinutes: phase.dayDurationMinutes,
+  }
   if (phase.id) {
-    return await store.updateGrowPhase(phase.id, {
-      durationDays: phase.durationDays,
-      endAt: phase.endAt,
-      isActive: phase.isActive,
-      name: phase.name,
-      order: phase.order,
-      startAt: phase.startAt,
-    })
+    return await store.updateGrowPhase(phase.id, payload)
   }
   const targetCycleId = cycleId ?? growId.value
   if (targetCycleId) {
     const created = await store.createGrowPhase({
-      durationDays: phase.durationDays,
-      endAt: phase.endAt,
+      ...payload,
       growCycleId: targetCycleId,
       isActive: false,
-      name: phase.name,
-      order: phase.order,
-      startAt: phase.startAt,
     })
     phase.id = created.id
     return created
@@ -598,141 +403,415 @@ async function reconcileActivePhase() {
   }
 }
 
-async function saveDeviceConfig(key: string) {
-  const phase = selectedPhase.value
-  if (!phase) {
-    return
-  }
-  const formState = deviceConfigForms.value[key]
-  if (!formState) {
-    return
-  }
-  const device = growDevices.value.find((d) => deviceKey(d) === key)
-  if (!device) {
-    return
-  }
-  const payload = buildConfigPayload(formState)
-  if (phase.id && device.id) {
-    try {
-      let result: DeviceConfig
-      if (formState.id) {
-        result = await store.updateDeviceConfig(formState.id, payload)
-      } else {
-        result = await store.createDeviceConfig({
-          configData: payload.configData,
-          deviceId: device.id,
-          growPhaseId: phase.id,
-          triggerType: payload.triggerType,
-        })
+// ---------- Expandable phase panels: environment + automation ----------
+
+const expandedPhaseKey = ref<string | null>(null)
+
+function toggleExpand(localKey: string) {
+  expandedPhaseKey.value = expandedPhaseKey.value === localKey ? null : localKey
+}
+
+// Auto-expand active phase on mount in edit mode
+onMounted(async () => {
+  if (isEditMode.value) {
+    const activeIdx = deriveActivePhaseIndex(sortedPhases.value)
+    if (activeIdx >= 0) {
+      const active = sortedPhases.value[activeIdx]
+      if (active?.localKey) {
+        expandedPhaseKey.value = active.localKey
       }
-      formState.id = result.id
-      formState.dirty = false
-      upsertConfigInPhase(phase, device.id, result)
-    } catch (error) {
-      console.error('Failed to save device config', error)
     }
-  } else {
-    const ref = deviceKey(device) || key
-    const staged: DeviceConfig = {
-      configData: payload.configData,
-      deviceId: ref,
-      triggerType: payload.triggerType,
+  }
+})
+
+// ---------- Environment ----------
+
+interface PhaseEnvCache {
+  day: PhaseEnvironment | null
+  night: PhaseEnvironment | null
+  loading: boolean
+  savingDay: boolean
+  savingNight: boolean
+}
+
+const envCache = ref<Record<string, PhaseEnvCache>>({})
+
+function getEnvCache(phase: GrowPhase): PhaseEnvCache {
+  const key = phase.localKey!
+  if (!envCache.value[key]) {
+    envCache.value[key] = {
+      day: null,
+      night: null,
+      loading: false,
+      savingDay: false,
+      savingNight: false,
     }
-    formState.dirty = false
-    upsertConfigInPhase(phase, ref, staged)
+  }
+  return envCache.value[key]
+}
+
+async function loadPhaseEnv(phase: GrowPhase) {
+  if (!phase.id) return
+  const cache = getEnvCache(phase)
+  cache.loading = true
+  try {
+    const data = await store.fetchPhaseEnvironment(phase.id)
+    cache.day = data.day
+    cache.night = data.night
+  } catch {
+    // non-fatal
+  } finally {
+    cache.loading = false
   }
 }
 
-function upsertConfigInPhase(phase: GrowPhase, deviceRef: string, config: DeviceConfig) {
-  if (!phase.deviceConfigs) {
-    phase.deviceConfigs = []
-  }
-  const idx = phase.deviceConfigs.findIndex((c) => c.deviceId === deviceRef)
-  if (idx !== -1) {
-    phase.deviceConfigs[idx] = config
-  } else {
-    phase.deviceConfigs.push(config)
-  }
-}
-
-async function removeDeviceConfig(key: string) {
-  const phase = selectedPhase.value
-  if (!phase) {
-    return
-  }
-  const formState = deviceConfigForms.value[key]
-  const device = growDevices.value.find((d) => deviceKey(d) === key)
-  if (!device) {
-    return
-  }
-  const ref = deviceKey(device) || key
-  const configs = phase.deviceConfigs ?? []
-  const config = configs.find((c) => c.deviceId === ref)
-  if (!config) {
-    return
-  }
-  if (config.id) {
-    try {
-      await store.deleteDeviceConfig(config.id)
-    } catch (error) {
-      console.error('Failed to delete device config', error)
-      return
-    }
-  }
-  phase.deviceConfigs = configs.filter((c) => c.deviceId !== ref)
-  if (formState) {
-    deviceConfigForms.value[key] = defaultConfigForm()
-  }
-}
-
-async function persistStagedDeviceConfigs(
-  cycleId: string,
-  deviceIdByLocalKey: Map<string, string>,
+async function savePhaseEnv(
+  phase: GrowPhase,
+  period: 'DAY' | 'NIGHT',
+  payload: PhaseEnvironmentPayload,
+  options: { silent?: boolean } = {},
 ) {
-  for (const phase of phases.value) {
-    if (!phase.id || !phase.deviceConfigs) {
-      continue
+  if (!phase.id) return
+  const cache = getEnvCache(phase)
+  if (period === 'DAY') cache.savingDay = true
+  else cache.savingNight = true
+  try {
+    const saved = await store.upsertPhaseEnvironment(phase.id, period, payload)
+    if (period === 'DAY') cache.day = saved
+    else cache.night = saved
+    return saved
+  } catch (error) {
+    if (!options.silent) {
+      const { message } = extractApiError(error, 'Failed to save environment')
+      toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Save failed' })
     }
-    for (const cfg of phase.deviceConfigs) {
-      if (cfg.id) {
-        continue
-      }
-      const realId = deviceIdByLocalKey.get(cfg.deviceId) ?? cfg.deviceId
-      try {
-        await store.createDeviceConfig({
-          configData: cfg.configData,
-          deviceId: realId,
-          growPhaseId: phase.id,
-          triggerType: cfg.triggerType,
-        })
-      } catch (error) {
-        console.error('Failed to persist staged device config', error)
-      }
-    }
+    throw error
+  } finally {
+    if (period === 'DAY') cache.savingDay = false
+    else cache.savingNight = false
   }
 }
 
-function remapStagedDeviceRefs(deviceIdByLocalKey: Map<string, string>) {
-  for (const phase of phases.value) {
-    if (!phase.deviceConfigs) {
-      continue
-    }
-    for (const cfg of phase.deviceConfigs) {
-      const real = deviceIdByLocalKey.get(cfg.deviceId)
-      if (real) {
-        cfg.deviceId = real
+async function clearPhaseEnv(phase: GrowPhase, period: 'DAY' | 'NIGHT') {
+  const phaseId = phase.id
+  if (!phaseId) return
+  confirm.require({
+    accept: async () => {
+      const cache = getEnvCache(phase)
+      if (period === 'DAY') cache.savingDay = true
+      else cache.savingNight = true
+      try {
+        await store.deletePhaseEnvironment(phaseId, period)
+        if (period === 'DAY') cache.day = null
+        else cache.night = null
+      } catch (error) {
+        const { message } = extractApiError(error, 'Failed to clear environment')
+        toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
+      } finally {
+        if (period === 'DAY') cache.savingDay = false
+        else cache.savingNight = false
       }
-    }
-  }
-  for (const device of stagedDevices.value) {
-    if (device.localKey) {
-      const real = deviceIdByLocalKey.get(device.localKey)
-      if (real) {
-        device.id = real
-      }
-    }
+    },
+    acceptLabel: 'Clear',
+    acceptProps: { severity: 'danger' },
+    header: `Clear ${period} environment`,
+    icon: 'pi pi-exclamation-triangle',
+    message: `Remove the ${period} environment thresholds for "${phase.name}"?`,
+    rejectLabel: 'Cancel',
+  })
+}
+
+function emptyEnvPayload(): PhaseEnvironmentPayload {
+  return {
+    co2Max: null,
+    co2Min: null,
+    co2Target: null,
+    humidityMax: null,
+    humidityMin: null,
+    humidityTarget: null,
+    tempMax: null,
+    tempMin: null,
+    tempTarget: null,
   }
 }
+
+const envDraftDay = ref<PhaseEnvironmentPayload>(emptyEnvPayload())
+const envDraftNight = ref<PhaseEnvironmentPayload>(emptyEnvPayload())
+const envEditingPhase = ref<GrowPhase | null>(null)
+const showEnvForm = ref(false)
+const envDialogLoading = ref(false)
+
+function envPayloadFromCache(env: PhaseEnvironment | null): PhaseEnvironmentPayload {
+  return {
+    co2Max: env?.co2Max ?? null,
+    co2Min: env?.co2Min ?? null,
+    co2Target: env?.co2Target ?? null,
+    humidityMax: env?.humidityMax ?? null,
+    humidityMin: env?.humidityMin ?? null,
+    humidityTarget: env?.humidityTarget ?? null,
+    tempMax: env?.tempMax ?? null,
+    tempMin: env?.tempMin ?? null,
+    tempTarget: env?.tempTarget ?? null,
+  }
+}
+
+async function openEnvDialog(phase: GrowPhase) {
+  envEditingPhase.value = phase
+  showEnvForm.value = true
+  envDialogLoading.value = true
+  try {
+    await loadPhaseEnv(phase)
+    const cache = getEnvCache(phase)
+    envDraftDay.value = envPayloadFromCache(cache.day)
+    envDraftNight.value = envPayloadFromCache(cache.night)
+  } finally {
+    envDialogLoading.value = false
+  }
+}
+
+function closeEnvDialog() {
+  envEditingPhase.value = null
+  showEnvForm.value = false
+}
+
+async function saveEnvDialog() {
+  const phase = envEditingPhase.value
+  if (!phase) return
+  const [dayRes, nightRes] = await Promise.allSettled([
+    savePhaseEnv(phase, 'DAY', envDraftDay.value, { silent: true }),
+    savePhaseEnv(phase, 'NIGHT', envDraftNight.value, { silent: true }),
+  ])
+  if (dayRes.status === 'fulfilled' && nightRes.status === 'fulfilled') {
+    toast.add({
+      detail: 'Environment saved',
+      life: 3000,
+      severity: 'success',
+      summary: 'Saved',
+    })
+    closeEnvDialog()
+    return
+  }
+  const failed: string[] = []
+  if (dayRes.status === 'rejected') failed.push('Day')
+  if (nightRes.status === 'rejected') failed.push('Night')
+  toast.add({
+    detail: `${failed.join(' and ')} save failed`,
+    life: 6000,
+    severity: 'error',
+    summary: 'Save failed',
+  })
+}
+
+function envDraftFor(period: 'DAY' | 'NIGHT'): PhaseEnvironmentPayload {
+  return period === 'DAY' ? envDraftDay.value : envDraftNight.value
+}
+
+const envIsSaving = computed(() => {
+  const phase = envEditingPhase.value
+  if (!phase) return false
+  const cache = getEnvCache(phase)
+  return cache.savingDay || cache.savingNight
+})
+
+// ---------- Automation ----------
+
+interface RulesCache {
+  rules: AutomationRule[]
+  loading: boolean
+}
+
+const rulesCache = ref<Record<string, RulesCache>>({})
+
+function getRulesCache(phase: GrowPhase): RulesCache {
+  const key = phase.localKey!
+  if (!rulesCache.value[key]) {
+    rulesCache.value[key] = { rules: [], loading: false }
+  }
+  return rulesCache.value[key]
+}
+
+async function loadPhaseRules(phase: GrowPhase) {
+  if (!phase.id) return
+  const cache = getRulesCache(phase)
+  cache.loading = true
+  try {
+    cache.rules = await store.fetchRulesByPhase(phase.id)
+  } catch {
+    // non-fatal
+  } finally {
+    cache.loading = false
+  }
+}
+
+async function toggleRule(phase: GrowPhase, rule: AutomationRule) {
+  try {
+    const updated = await store.toggleRule(rule.id)
+    const cache = getRulesCache(phase)
+    const idx = cache.rules.findIndex((r) => r.id === rule.id)
+    if (idx !== -1) cache.rules[idx] = updated
+  } catch (error) {
+    const { message } = extractApiError(error, 'Failed to toggle rule')
+    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Toggle failed' })
+  }
+}
+
+async function deleteRule(phase: GrowPhase, rule: AutomationRule) {
+  confirm.require({
+    accept: async () => {
+      try {
+        await store.deleteRule(rule.id)
+        const cache = getRulesCache(phase)
+        cache.rules = cache.rules.filter((r) => r.id !== rule.id)
+      } catch (error) {
+        const { message } = extractApiError(error, 'Failed to delete rule')
+        toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
+      }
+    },
+    acceptLabel: 'Delete',
+    acceptProps: { severity: 'danger' },
+    header: 'Delete rule',
+    icon: 'pi pi-exclamation-triangle',
+    message: `Remove this automation rule for "${phase.name}"?`,
+    rejectLabel: 'Cancel',
+  })
+}
+
+// ---------- Quick-add ----------
+
+const controllerDevices = computed<Device[]>(
+  () =>
+    (
+      store.controllers.find((c) => c.id === form.value.controllerId) as
+        | ((typeof store.controllers)[number] & { devices?: Device[] })
+        | undefined
+    )?.devices ?? [],
+)
+
+const quickAddDeviceId = ref<string[]>([])
+
+const QUICK_ADD_TEMPLATES: Array<{
+  label: string
+  deviceTypes: DeviceType[]
+  watchedSensorType: SensorType
+  condition: RuleCondition
+  action: DeviceAction
+  period: DayNightPeriod | null
+}> = [
+  {
+    label: 'Light — Day start',
+    action: DeviceAction.ON,
+    condition: RuleCondition.SCHEDULE_ON,
+    deviceTypes: [DeviceType.LIGHT],
+    period: DayNightPeriod.DAY,
+    watchedSensorType: SensorType.TEMPERATURE,
+  },
+  {
+    label: 'Light — Night start',
+    action: DeviceAction.OFF,
+    condition: RuleCondition.SCHEDULE_OFF,
+    deviceTypes: [DeviceType.LIGHT],
+    period: DayNightPeriod.NIGHT,
+    watchedSensorType: SensorType.TEMPERATURE,
+  },
+  {
+    label: 'Exhaust/Intake Fan — Above max temp',
+    action: DeviceAction.ON,
+    condition: RuleCondition.ABOVE_MAX,
+    deviceTypes: [
+      DeviceType.EXHAUST_FAN,
+      DeviceType.INTAKE_FAN,
+      DeviceType.AIR_CONDITIONER,
+      DeviceType.CIRCULATION_FAN,
+    ],
+    period: null,
+    watchedSensorType: SensorType.TEMPERATURE,
+  },
+  {
+    label: 'Heater — Below min temp',
+    action: DeviceAction.ON,
+    condition: RuleCondition.BELOW_MIN,
+    deviceTypes: [DeviceType.HEATER],
+    period: null,
+    watchedSensorType: SensorType.TEMPERATURE,
+  },
+  {
+    label: 'Humidifier — Below min humidity',
+    action: DeviceAction.ON,
+    condition: RuleCondition.BELOW_MIN,
+    deviceTypes: [DeviceType.HUMIDIFIER],
+    period: null,
+    watchedSensorType: SensorType.HUMIDITY,
+  },
+  {
+    label: 'Dehumidifier — Above max humidity',
+    action: DeviceAction.ON,
+    condition: RuleCondition.ABOVE_MAX,
+    deviceTypes: [DeviceType.DEHUMIDIFIER],
+    period: null,
+    watchedSensorType: SensorType.HUMIDITY,
+  },
+  {
+    label: 'CO₂ — Below min CO₂ (day)',
+    action: DeviceAction.ON,
+    condition: RuleCondition.BELOW_MIN,
+    deviceTypes: [DeviceType.CO2_INJECTOR],
+    period: DayNightPeriod.DAY,
+    watchedSensorType: SensorType.CO2,
+  },
+]
+
+async function quickAddRule(phase: GrowPhase, template: (typeof QUICK_ADD_TEMPLATES)[number]) {
+  const deviceIds = quickAddDeviceId.value
+  if (!phase.id || deviceIds.length === 0) {
+    toast.add({
+      detail: 'Select a device first.',
+      life: 4000,
+      severity: 'warn',
+      summary: 'No device selected',
+    })
+    return
+  }
+  const cache = getRulesCache(phase)
+  try {
+    for (const dId of deviceIds) {
+      const payload: CreateAutomationRulePayload = {
+        action: template.action,
+        condition: template.condition,
+        cooldownSeconds: 180,
+        deviceId: dId,
+        enabled: true,
+        growPhaseId: phase.id,
+        period: template.period,
+        watchedSensorType: template.watchedSensorType,
+      }
+      const created = await store.createRule(payload)
+      cache.rules.push(created)
+    }
+    quickAddDeviceId.value = []
+    toast.add({
+      detail: `Rule${deviceIds.length > 1 ? 's' : ''} added.`,
+      life: 3000,
+      severity: 'success',
+      summary: 'Rule created',
+    })
+  } catch (error) {
+    const { message } = extractApiError(error, 'Failed to create rule')
+    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Create failed' })
+  }
+}
+
+// Watch expanded phase → load env + rules
+watch(
+  () => expandedPhaseKey.value,
+  async (key) => {
+    if (!key || !isEditMode.value) return
+    const phase = phases.value.find((p) => p.localKey === key)
+    if (!phase) return
+    await Promise.all([loadPhaseEnv(phase), loadPhaseRules(phase)])
+  },
+)
+
+// ---------- Save ---------
 
 const handleSave = async () => {
   if (!form.value.controllerId) {
@@ -768,23 +847,13 @@ const handleSave = async () => {
       for (const phase of phases.value) {
         await savePhase(phase)
       }
-      await persistStagedDeviceConfigs(growId.value, new Map())
       await reconcileActivePhase()
       router.push('/admin')
     } else {
-      const devicesSeed: DeviceSeed[] = stagedDevices.value.map((d) => ({
-        isActive: d.isActive,
-        mqttTopic: d.mqttTopic,
-        name: d.name,
-        pinNumber: d.pinNumber,
-        type: d.type,
-      }))
-
       let created
       try {
         created = await store.createGrowCycle({
           controllerId: form.value.controllerId,
-          devices: devicesSeed,
           name: form.value.name,
           startAt: startAtDate,
         })
@@ -803,35 +872,8 @@ const handleSave = async () => {
         return
       }
 
-      const deviceIdByLocalKey = new Map<string, string>()
-      const createdDevices = created.devices ?? []
-      for (let i = 0; i < stagedDevices.value.length; i++) {
-        const staged = stagedDevices.value[i]
-        const createdDevice = createdDevices[i]
-        if (staged?.localKey && createdDevice?.id) {
-          deviceIdByLocalKey.set(staged.localKey, createdDevice.id)
-        }
-      }
-      remapStagedDeviceRefs(deviceIdByLocalKey)
-
-      const backendPhases = created.phases ?? []
-      const userPhases = sortedPhases.value
-
-      for (let i = 0; i < userPhases.length; i++) {
-        const userPhase = userPhases[i]
-        const backendPhase = backendPhases[i]
-        if (userPhase && backendPhase) {
-          userPhase.id = backendPhase.id
-          await savePhase(userPhase)
-        } else if (userPhase) {
-          await savePhase(userPhase, created.id)
-        }
-      }
-      for (let i = userPhases.length; i < backendPhases.length; i++) {
-        const backendPhase = backendPhases[i]
-        if (backendPhase?.id) {
-          await store.deleteGrowPhase(backendPhase.id)
-        }
+      for (const phase of sortedPhases.value) {
+        await savePhase(phase, created.id)
       }
 
       const growActive = deriveGrowActive(startAtDate, sortedPhases.value)
@@ -852,9 +894,8 @@ const handleSave = async () => {
         }
         return
       }
-      await persistStagedDeviceConfigs(created.id, deviceIdByLocalKey)
       await reconcileActivePhase()
-      router.push('/admin')
+      router.push(`/admin/grows/edit/${created.id}`)
     }
   } catch (error) {
     console.error('Failed to save', error)
@@ -862,9 +903,16 @@ const handleSave = async () => {
     saving.value = false
   }
 }
+
+function fmtTime(dayStartMinutes: number): string {
+  const h = Math.floor(dayStartMinutes / 60)
+  const m = dayStartMinutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
 </script>
 
 <template>
+  <ConfirmDialog />
   <div v-if="ready" class="form-page">
     <Card>
       <template #title>
@@ -880,10 +928,6 @@ const handleSave = async () => {
             <Tab value="phases">
               <i class="pi pi-list" />
               <span>Phases</span>
-            </Tab>
-            <Tab value="devices">
-              <i class="pi pi-cog" />
-              <span>Devices</span>
             </Tab>
           </TabList>
           <TabPanels>
@@ -942,7 +986,12 @@ const handleSave = async () => {
                   />
                 </div>
 
-                <DataTable v-if="phases.length > 0" :value="sortedPhases" size="small">
+                <DataTable
+                  v-if="phases.length > 0"
+                  :value="sortedPhases"
+                  size="small"
+                  class="phases-table"
+                >
                   <Column header="#" style="width: 60px">
                     <template #body="slotProps">
                       <span class="phase-order-badge">{{ slotProps.data.order }}</span>
@@ -952,10 +1001,10 @@ const handleSave = async () => {
                   <Column header="Duration" sortable>
                     <template #body="slotProps"> {{ slotProps.data.durationDays }} days </template>
                   </Column>
-                  <Column header="Schedule" sortable>
+                  <Column header="Day/Night" sortable>
                     <template #body="slotProps">
-                      <code v-if="slotProps.data.startAt && slotProps.data.endAt" class="meta-code">
-                        {{ slotProps.data.startAt }} → {{ slotProps.data.endAt }}
+                      <code v-if="slotProps.data.dayStartMinutes != null" class="meta-code">
+                        {{ formatPhaseDayNight(slotProps.data) }}
                       </code>
                       <span v-else class="muted">—</span>
                     </template>
@@ -969,7 +1018,7 @@ const handleSave = async () => {
                       />
                     </template>
                   </Column>
-                  <Column header="Actions" style="width: 180px">
+                  <Column header="Actions" style="width: 120px">
                     <template #body="slotProps">
                       <div class="row-actions">
                         <Button
@@ -983,15 +1032,15 @@ const handleSave = async () => {
                           @click.stop="openEditPhase(phases.indexOf(slotProps.data))"
                         />
                         <Button
-                          v-if="slotProps.data.localKey"
-                          icon="pi pi-cog"
+                          icon="pi pi-sun"
                           severity="info"
                           text
                           rounded
                           size="small"
-                          aria-label="Configure devices"
-                          v-tooltip.top="'Configure devices for this phase'"
-                          @click.stop="goToDevicesForPhaseFromRow(slotProps.data)"
+                          aria-label="Edit environment"
+                          :disabled="!slotProps.data.id"
+                          v-tooltip.top="slotProps.data.id ? 'Environment' : 'Save the grow first'"
+                          @click.stop="openEnvDialog(slotProps.data)"
                         />
                         <Button
                           icon="pi pi-trash"
@@ -1006,6 +1055,154 @@ const handleSave = async () => {
                       </div>
                     </template>
                   </Column>
+                  <Column header="" style="width: 48px">
+                    <template #body="slotProps">
+                      <Button
+                        :icon="
+                          expandedPhaseKey === slotProps.data.localKey
+                            ? 'pi pi-chevron-up'
+                            : 'pi pi-chevron-down'
+                        "
+                        text
+                        rounded
+                        size="small"
+                        severity="secondary"
+                        :aria-label="
+                          expandedPhaseKey === slotProps.data.localKey ? 'Collapse' : 'Expand'
+                        "
+                        @click="toggleExpand(slotProps.data.localKey!)"
+                      />
+                    </template>
+                  </Column>
+
+                  <template #expansion="slotProps">
+                    <div
+                      v-if="expandedPhaseKey === slotProps.data.localKey"
+                      class="phase-expansion"
+                    >
+                      <!-- Automation -->
+                      <div class="expansion-section">
+                        <div class="expansion-section-header">
+                          <h4 class="expansion-section-title">Automation Rules</h4>
+                          <p class="expansion-section-hint">
+                            {{
+                              isEditMode
+                                ? 'Rules drive device actuation for this phase.'
+                                : 'Save the grow first to configure automation rules.'
+                            }}
+                          </p>
+                        </div>
+
+                        <div v-if="!isEditMode" class="env-locked-hint">
+                          <i class="pi pi-lock" />
+                          Save the grow to enable automation rules.
+                        </div>
+
+                        <template v-else>
+                          <div v-if="getRulesCache(slotProps.data).loading" class="env-loading">
+                            <i class="pi pi-spin pi-spinner" /> Loading…
+                          </div>
+
+                          <template v-else>
+                            <DataTable
+                              v-if="getRulesCache(slotProps.data).rules.length > 0"
+                              :value="getRulesCache(slotProps.data).rules"
+                              size="small"
+                              class="rules-table"
+                            >
+                              <Column field="deviceId" header="Device">
+                                <template #body="ruleSlot">
+                                  {{
+                                    controllerDevices.find((d) => d.id === ruleSlot.data.deviceId)
+                                      ?.name ?? ruleSlot.data.deviceId
+                                  }}
+                                </template>
+                              </Column>
+                              <Column field="watchedSensorType" header="Sensor" />
+                              <Column field="condition" header="Condition" />
+                              <Column field="action" header="Action">
+                                <template #body="ruleSlot">
+                                  <Tag
+                                    :value="ruleSlot.data.action"
+                                    :severity="
+                                      ruleSlot.data.action === 'ON' ? 'success' : 'secondary'
+                                    "
+                                    rounded
+                                  />
+                                </template>
+                              </Column>
+                              <Column field="period" header="Period">
+                                <template #body="ruleSlot">
+                                  <span class="type-pill">
+                                    {{ ruleSlot.data.period ?? 'Both' }}
+                                  </span>
+                                </template>
+                              </Column>
+                              <Column field="cooldownSeconds" header="Cooldown" />
+                              <Column header="Enabled" style="width: 80px">
+                                <template #body="ruleSlot">
+                                  <InputSwitch
+                                    :modelValue="ruleSlot.data.enabled"
+                                    @update:modelValue="toggleRule(slotProps.data, ruleSlot.data)"
+                                  />
+                                </template>
+                              </Column>
+                              <Column header="Last Triggered">
+                                <template #body="ruleSlot">
+                                  <span v-if="ruleSlot.data.lastTriggeredAt" class="meta-code">
+                                    {{ ruleSlot.data.lastTriggeredAt }}
+                                  </span>
+                                  <span v-else class="muted">Never</span>
+                                </template>
+                              </Column>
+                              <Column header="" style="width: 60px">
+                                <template #body="ruleSlot">
+                                  <Button
+                                    icon="pi pi-trash"
+                                    text
+                                    rounded
+                                    size="small"
+                                    severity="danger"
+                                    v-tooltip.top="'Delete rule'"
+                                    @click="deleteRule(slotProps.data, ruleSlot.data)"
+                                  />
+                                </template>
+                              </Column>
+                            </DataTable>
+
+                            <div v-else class="rules-empty">
+                              No rules configured for this phase.
+                            </div>
+
+                            <!-- Quick-add -->
+                            <div class="quick-add">
+                              <h5 class="quick-add-title">Quick-add rules</h5>
+                              <div class="quick-add-controls">
+                                <MultiSelect
+                                  v-model="quickAddDeviceId"
+                                  :options="controllerDevices"
+                                  optionLabel="name"
+                                  optionValue="id"
+                                  placeholder="Select device(s)"
+                                  class="quick-add-device-select"
+                                  display="chip"
+                                />
+                                <Button
+                                  v-for="tmpl in QUICK_ADD_TEMPLATES"
+                                  :key="tmpl.label"
+                                  :label="tmpl.label"
+                                  size="small"
+                                  severity="secondary"
+                                  :disabled="!slotProps.data.id || quickAddDeviceId.length === 0"
+                                  @click="quickAddRule(slotProps.data, tmpl)"
+                                />
+                              </div>
+                            </div>
+                          </template>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
                 </DataTable>
 
                 <div v-else class="empty-state">
@@ -1016,160 +1213,6 @@ const handleSave = async () => {
                 <div v-if="phases.length > 0" class="total-summary">
                   <span class="total-label">Total Cycle Duration</span>
                   <span class="total-value">{{ totalCycleDays }} days</span>
-                </div>
-              </div>
-            </TabPanel>
-
-            <TabPanel value="devices">
-              <div class="tab-section">
-                <div class="section-toolbar">
-                  <h3 class="section-title">Device Configuration</h3>
-                  <div class="toolbar-actions">
-                    <span class="section-hint">{{ deviceConfigHint }}</span>
-                    <Button
-                      v-if="form.controllerId"
-                      label="Add Device"
-                      icon="pi pi-plus"
-                      size="small"
-                      severity="success"
-                      @click="openAddDevice"
-                    />
-                  </div>
-                </div>
-
-                <div v-if="!isEditMode" class="staged-list">
-                  <h4 class="staged-title">Staged devices ({{ stagedDevices.length }})</h4>
-                  <DataTable v-if="stagedDevices.length > 0" :value="stagedDevices" size="small">
-                    <Column field="name" header="Name" sortable style="font-weight: 600"></Column>
-                    <Column field="type" header="Type" sortable>
-                      <template #body="slotProps">
-                        <span class="type-pill">
-                          {{ slotProps.data.type.replace(/_/g, ' ') }}
-                        </span>
-                      </template>
-                    </Column>
-                    <Column field="pinNumber" header="GPIO Pin" sortable>
-                      <template #body="slotProps">
-                        <code class="meta-code">{{ slotProps.data.pinNumber }}</code>
-                      </template>
-                    </Column>
-                    <Column header="Actions" style="width: 80px">
-                      <template #body="slotProps">
-                        <Button
-                          icon="pi pi-trash"
-                          severity="danger"
-                          text
-                          rounded
-                          size="small"
-                          aria-label="Remove staged device"
-                          v-tooltip.top="'Remove'"
-                          @click="removeStagedDevice(slotProps.data.localKey!)"
-                        />
-                      </template>
-                    </Column>
-                  </DataTable>
-                </div>
-
-                <div class="field">
-                  <label for="config-phase" class="field-label">
-                    Configure devices for phase
-                  </label>
-                  <Select
-                    id="config-phase"
-                    v-model="selectedPhaseKey"
-                    :options="selectablePhases"
-                    optionLabel="name"
-                    optionValue="key"
-                    placeholder="Select a phase"
-                    class="full-width"
-                  />
-                </div>
-
-                <DataTable
-                  v-if="selectedPhase && growDevices.length > 0"
-                  :value="configRows"
-                  size="small"
-                >
-                  <Column header="Device" sortable>
-                    <template #body="slotProps">
-                      <div class="config-device-info">
-                        <span class="config-device-name">{{ slotProps.data.device.name }}</span>
-                        <span class="type-pill">
-                          {{ slotProps.data.device.type.replace(/_/g, ' ') }}
-                        </span>
-                      </div>
-                    </template>
-                  </Column>
-                  <Column header="Trigger" sortable>
-                    <template #body="slotProps">
-                      <Tag
-                        v-if="slotProps.data.config"
-                        :value="getTriggerLabel(slotProps.data.config)"
-                        :severity="getTriggerSeverity(slotProps.data.config)"
-                        rounded
-                      />
-                      <span v-else class="muted">Unconfigured</span>
-                    </template>
-                  </Column>
-                  <Column header="Configuration" sortable>
-                    <template #body="slotProps">
-                      <code v-if="slotProps.data.config" class="config-summary">
-                        {{
-                          formatConfigSummary(
-                            slotProps.data.config.triggerType,
-                            slotProps.data.config.configData,
-                          )
-                        }}
-                      </code>
-                      <span v-else class="muted">—</span>
-                    </template>
-                  </Column>
-                  <Column header="Actions" style="width: 130px">
-                    <template #body="slotProps">
-                      <div class="row-actions">
-                        <Button
-                          icon="pi pi-pencil"
-                          severity="secondary"
-                          text
-                          rounded
-                          size="small"
-                          aria-label="Configure device"
-                          v-tooltip.top="'Configure'"
-                          @click.stop="openConfigModal(slotProps.data.key)"
-                        />
-                        <Button
-                          v-if="slotProps.data.config"
-                          icon="pi pi-trash"
-                          severity="danger"
-                          text
-                          rounded
-                          size="small"
-                          aria-label="Delete configuration"
-                          v-tooltip.top="'Delete configuration'"
-                          @click.stop="removeDeviceConfig(slotProps.data.key)"
-                        />
-                      </div>
-                    </template>
-                  </Column>
-                </DataTable>
-
-                <div v-else-if="!form.controllerId" class="empty-state">
-                  <span class="pi pi-arrow-up empty-icon" />
-                  <p>Select a controller in the Details tab first.</p>
-                </div>
-                <div v-else-if="!selectedPhase" class="empty-state">
-                  <span class="pi pi-arrow-up empty-icon" />
-                  <p>Select a phase above to configure its devices.</p>
-                </div>
-                <div v-else class="empty-state">
-                  <span class="pi pi-box empty-icon" />
-                  <p>
-                    {{
-                      isEditMode
-                        ? 'This grow cycle has no devices yet. Add one to configure triggers.'
-                        : 'No devices staged yet. Use Add Device to provision hardware for this grow.'
-                    }}
-                  </p>
                 </div>
               </div>
             </TabPanel>
@@ -1191,7 +1234,7 @@ const handleSave = async () => {
     <Dialog
       v-model:visible="showPhaseModal"
       :header="editingPhaseIndex === null ? 'Add Phase' : 'Edit Phase'"
-      :style="{ width: '90vw', maxWidth: '480px' }"
+      :style="{ width: '90vw', maxWidth: '520px' }"
       modal
       dismissable-mask
       class="phase-modal"
@@ -1210,6 +1253,49 @@ const handleSave = async () => {
         <div class="field">
           <label for="phase-duration-modal" class="field-label">Duration (days)</label>
           <InputNumber inputId="phase-duration-modal" v-model="phaseDraft.durationDays" :min="1" />
+        </div>
+        <div class="field-row-2">
+          <div class="field">
+            <label for="phase-day-start" class="field-label">Day Start (HH:MM)</label>
+            <div class="time-picker-row">
+              <InputNumber
+                inputId="phase-day-start-hours"
+                v-model="phaseDraftStartHours"
+                :min="0"
+                :max="23"
+                showButtons
+                buttonLayout="horizontal"
+                :step="1"
+                class="time-input"
+                @blur="applyTimeToPhaseDraft"
+              />
+              <span class="time-sep">:</span>
+              <InputNumber
+                inputId="phase-day-start-minutes"
+                v-model="phaseDraftStartMinutes"
+                :min="0"
+                :max="59"
+                showButtons
+                buttonLayout="horizontal"
+                :step="5"
+                class="time-input"
+                @blur="applyTimeToPhaseDraft"
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label for="phase-day-duration" class="field-label">Day Duration (hours)</label>
+            <InputNumber
+              inputId="phase-day-duration"
+              v-model="phaseDraftDurationHours"
+              :min="0"
+              :max="24"
+              showButtons
+              buttonLayout="horizontal"
+              :step="1"
+            />
+            <span class="field-hint">Night = {{ 24 - phaseDraftDurationHours }} h</span>
+          </div>
         </div>
         <div v-if="phaseDraft.durationDays" class="date-range date-range--modal">
           <span>
@@ -1230,218 +1316,103 @@ const handleSave = async () => {
       </template>
     </Dialog>
 
+    <!-- Environment edit dialog (combined Day + Night) -->
     <Dialog
-      v-model:visible="showConfigModal"
-      :style="{ width: '90vw', maxWidth: '560px' }"
+      v-model="showEnvForm"
+      :header="`Environment — ${envEditingPhase?.name ?? ''}`"
+      :style="{ width: '90vw', maxWidth: '800px' }"
       modal
       dismissable-mask
-      class="config-modal"
+      class="env-modal"
     >
-      <template #header>
-        <div class="config-modal-header">
-          <span class="config-modal-title">{{ configModalTitle }}</span>
-          <span v-if="configModalSubtitle" class="config-modal-subtitle">
-            {{ configModalSubtitle }}
-          </span>
+      <div v-if="envDialogLoading" class="env-loading">
+        <i class="pi pi-spin pi-spinner" /> Loading environment…
+      </div>
+      <div v-else class="form-stack">
+        <div class="env-form-grid env-form-grid--dual">
+          <div v-for="period in ['DAY', 'NIGHT'] as const" :key="period" class="env-form-group">
+            <div class="env-form-group-header">
+              <h5 class="env-form-group-title">{{ period }}</h5>
+              <Button
+                v-if="envEditingPhase?.id"
+                icon="pi pi-trash"
+                label="Clear"
+                text
+                size="small"
+                severity="danger"
+                v-tooltip.top="`Clear ${period} environment`"
+                :loading="
+                  period === 'DAY'
+                    ? getEnvCache(envEditingPhase).savingDay
+                    : getEnvCache(envEditingPhase).savingNight
+                "
+                @click="clearPhaseEnv(envEditingPhase!, period)"
+              />
+            </div>
+            <div class="env-form-fields">
+              <h6 class="env-form-subtitle">Temperature (°C)</h6>
+              <div class="field-row-3">
+                <div class="field">
+                  <label class="field-label">Min</label>
+                  <InputNumber v-model="envDraftFor(period).tempMin" placeholder="e.g. 18" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Target</label>
+                  <InputNumber v-model="envDraftFor(period).tempTarget" placeholder="e.g. 22" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Max</label>
+                  <InputNumber v-model="envDraftFor(period).tempMax" placeholder="e.g. 28" />
+                </div>
+              </div>
+            </div>
+            <div class="env-form-fields">
+              <h6 class="env-form-subtitle">Humidity (%)</h6>
+              <div class="field-row-3">
+                <div class="field">
+                  <label class="field-label">Min</label>
+                  <InputNumber v-model="envDraftFor(period).humidityMin" placeholder="e.g. 50" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Target</label>
+                  <InputNumber v-model="envDraftFor(period).humidityTarget" placeholder="e.g. 65" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Max</label>
+                  <InputNumber v-model="envDraftFor(period).humidityMax" placeholder="e.g. 80" />
+                </div>
+              </div>
+            </div>
+            <div class="env-form-fields">
+              <h6 class="env-form-subtitle">CO₂ (ppm)</h6>
+              <div class="field-row-3">
+                <div class="field">
+                  <label class="field-label">Min</label>
+                  <InputNumber v-model="envDraftFor(period).co2Min" placeholder="e.g. 800" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Target</label>
+                  <InputNumber v-model="envDraftFor(period).co2Target" placeholder="e.g. 1200" />
+                </div>
+                <div class="field">
+                  <label class="field-label">Max</label>
+                  <InputNumber v-model="envDraftFor(period).co2Max" placeholder="e.g. 1500" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </template>
-      <div v-if="modalForm" class="form-stack">
-        <div class="field">
-          <label for="trigger-modal" class="field-label">Trigger Type</label>
-          <Select
-            inputId="trigger-modal"
-            v-model="modalForm.triggerType"
-            :options="TRIGGER_TYPE_OPTIONS"
-            optionLabel="label"
-            optionValue="value"
-            class="full-width"
-          />
-        </div>
-
-        <template v-if="modalForm.triggerType === TriggerType.SCHEDULE">
-          <div class="field">
-            <label for="onTime-modal" class="field-label">On Time</label>
-            <DatePicker
-              inputId="onTime-modal"
-              v-model="modalOnTime"
-              timeOnly
-              hourFormat="24"
-              class="full-width"
-            />
-          </div>
-          <div class="field">
-            <label for="dur-modal" class="field-label">Duration (hours)</label>
-            <InputNumber
-              inputId="dur-modal"
-              v-model="modalForm.durationHours"
-              :min="0.1"
-              :max="24"
-              :minFractionDigits="1"
-              :maxFractionDigits="1"
-            />
-          </div>
-        </template>
-
-        <template v-else-if="modalForm.triggerType === TriggerType.THRESHOLD">
-          <div class="field">
-            <label for="metric-modal" class="field-label">Metric</label>
-            <InputText
-              inputId="metric-modal"
-              v-model="modalForm.metric"
-              placeholder="TEMP, HUMIDITY, CO2..."
-              class="full-width"
-            />
-          </div>
-          <div class="field">
-            <label for="high-modal" class="field-label">High Threshold</label>
-            <InputNumber
-              inputId="high-modal"
-              v-model="modalForm.high"
-              :minFractionDigits="1"
-              :maxFractionDigits="2"
-            />
-          </div>
-        </template>
-
-        <div v-else class="config-note">No additional parameters for this trigger type.</div>
+        <p class="field-hint">Leave blank to leave a threshold unconstrained.</p>
       </div>
       <template #footer>
-        <Button
-          v-if="editingDeviceHasConfig"
-          label="Delete"
-          icon="pi pi-trash"
-          severity="danger"
-          text
-          size="small"
-          @click="deleteConfigFromModal"
-        />
-        <Button label="Cancel" severity="secondary" size="small" @click="closeConfigModal" />
+        <Button label="Cancel" severity="secondary" size="small" @click="closeEnvDialog" />
         <Button
           label="Save"
-          icon="pi pi-save"
           severity="success"
           size="small"
-          @click="saveConfigFromModal"
-        />
-      </template>
-    </Dialog>
-
-    <Dialog
-      v-model:visible="showDeviceModal"
-      header="Add Device"
-      :style="{ width: '90vw', maxWidth: '520px' }"
-      modal
-      dismissable-mask
-      class="device-modal"
-    >
-      <div class="form-stack">
-        <div class="field">
-          <label for="dev-name" class="field-label">Device Name</label>
-          <InputText
-            id="dev-name"
-            v-model="deviceForm.name"
-            placeholder="DHT22 Temperature Sensor"
-            class="full-width"
-          />
-        </div>
-
-        <div class="field-row">
-          <div class="field">
-            <label for="dev-type" class="field-label">Type</label>
-            <Select
-              id="dev-type"
-              v-model="deviceForm.type"
-              :options="deviceTypeOptions"
-              optionLabel="label"
-              optionValue="value"
-              placeholder="Select type"
-              class="full-width"
-            />
-          </div>
-          <div class="field">
-            <label for="dev-pin" class="field-label">GPIO Pin</label>
-            <InputText
-              id="dev-pin"
-              v-model="deviceForm.pinNumber"
-              placeholder="4"
-              class="full-width"
-            />
-          </div>
-        </div>
-
-        <Accordion v-model:value="openPinoutPanels" class="pinout-accordion">
-          <AccordionPanel value="pinout">
-            <AccordionHeader>
-              <span class="pinout-accordion__title">
-                <i class="pi pi-map pinout-accordion__icon" />
-                GPIO Pinout Reference
-              </span>
-            </AccordionHeader>
-            <AccordionContent>
-              <p class="pinout-hint">
-                Use the BCM GPIO number above (not the physical pin position). For example, enter
-                <code>4</code> for the standard GCLK pin on physical pin 7.
-              </p>
-              <GpioPinoutDiagram />
-              <ul class="pinout-legend">
-                <li class="legend-group">
-                  <span class="legend-group__title">Pin types</span>
-                  <span class="legend-group__items">
-                    <span class="legend-item"><span class="swatch swatch--gpio" /> BCM GPIO</span>
-                    <span class="legend-item"><span class="swatch swatch--3v3" /> 3.3 V</span>
-                    <span class="legend-item"><span class="swatch swatch--5v" /> 5 V</span>
-                    <span class="legend-item"><span class="swatch swatch--gnd" /> Ground</span>
-                    <span class="legend-item"
-                      ><span class="swatch swatch--id" /> Reserved (ID EEPROM)</span
-                    >
-                  </span>
-                </li>
-                <li class="legend-group">
-                  <span class="legend-group__title">Bus functions</span>
-                  <span class="legend-group__items">
-                    <span class="legend-item"
-                      ><span class="swatch swatch--i2c" /> I²C · SDA/SCL</span
-                    >
-                    <span class="legend-item"
-                      ><span class="swatch swatch--spi" /> SPI · CE/MOSI/MISO/SCLK</span
-                    >
-                    <span class="legend-item"
-                      ><span class="swatch swatch--uart" /> UART · TXD/RXD</span
-                    >
-                    <span class="legend-item"
-                      ><span class="swatch swatch--pwm" /> PWM · PWM0/PWM1</span
-                    >
-                  </span>
-                </li>
-              </ul>
-            </AccordionContent>
-          </AccordionPanel>
-        </Accordion>
-
-        <div class="field">
-          <label for="dev-topic" class="field-label">MQTT Topic</label>
-          <InputText
-            id="dev-topic"
-            v-model="deviceForm.mqttTopic"
-            placeholder="tent1/device/light/cmd"
-            class="full-width"
-          />
-        </div>
-
-        <div class="switch-row">
-          <InputSwitch v-model="deviceForm.isActive" inputId="dev-active" />
-          <label for="dev-active" class="field-label-inline">Active</label>
-        </div>
-      </div>
-      <template #footer>
-        <Button label="Cancel" severity="secondary" size="small" @click="closeDeviceModal" />
-        <Button
-          label="Add Device"
-          icon="pi pi-plus"
-          severity="success"
-          size="small"
-          :disabled="!deviceForm.name"
-          @click="saveDevice"
+          :loading="envIsSaving"
+          :disabled="envDialogLoading"
+          @click="saveEnvDialog"
         />
       </template>
     </Dialog>
@@ -1482,14 +1453,6 @@ const handleSave = async () => {
   font-size: var(--text-xl);
   font-weight: 700;
   color: var(--color-text-primary);
-}
-
-.section-hint {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
-  font-weight: 500;
 }
 
 .tab-section {
@@ -1578,30 +1541,6 @@ const handleSave = async () => {
   font-family: var(--font-mono);
 }
 
-.config-summary {
-  background: var(--color-code-bg);
-  padding: 0.1875rem 0.5rem;
-  border-radius: var(--radius-sm);
-  color: var(--color-code-text);
-  font-size: var(--text-sm);
-  border: 1px solid var(--color-border);
-  font-family: var(--font-mono);
-  display: inline-block;
-}
-
-.config-device-info {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.config-device-name {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
 .muted {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -1654,31 +1593,6 @@ const handleSave = async () => {
   margin-right: 0.25rem;
 }
 
-.config-note {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  font-style: italic;
-  padding: var(--space-2) 0;
-}
-
-.config-modal-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.config-modal-title {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.config-modal-subtitle {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  text-transform: capitalize;
-}
-
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1711,177 +1625,241 @@ const handleSave = async () => {
   border-top: 1px solid var(--color-border);
 }
 
-.toolbar-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.staged-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-lg);
-}
-
-.staged-title {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.field-row {
-  display: flex;
+.field-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
 }
 
-.field-row .field {
-  flex: 1;
-}
-
-.switch-row {
+.time-picker-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
-.field-label-inline {
-  font-size: var(--text-md);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  cursor: pointer;
+.time-input {
+  width: 80px;
 }
 
-.pinout-accordion {
-  width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--color-bg-elevated);
-}
-
-.pinout-accordion__title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
+.time-sep {
+  font-size: var(--text-lg);
+  font-weight: 700;
   color: var(--color-text-secondary);
 }
 
-.pinout-accordion__icon {
-  color: var(--color-accent);
-  font-size: var(--text-md);
+.field-hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
 }
 
-.pinout-hint {
-  margin: 0 0 var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
-}
-
-.pinout-hint code {
-  font-family: var(--font-mono);
-  background: var(--color-code-bg);
-  color: var(--color-code-text);
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  font-size: var(--text-sm);
-}
-
-.pinout-legend {
-  list-style: none;
+/* Expandable row */
+.phase-expansion {
+  padding: var(--space-4) var(--space-4) var(--space-4) calc(1rem + 60px);
+  background: var(--color-bg-base);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  margin: var(--space-3) 0 0;
-  padding: 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
+  gap: var(--space-5);
 }
 
-.legend-group {
+.expansion-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.expansion-section-header {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
 }
 
-.legend-group__title {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.expansion-section-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.expansion-section-hint {
+  margin: 0;
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
-.legend-group__items {
+.env-locked-hint {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: var(--space-3) 0;
 }
 
-.legend-item {
-  display: inline-flex;
+.env-loading {
+  display: flex;
   align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-2) 0;
+}
+
+.env-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.env-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  background: var(--color-bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.env-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.env-card-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.env-card-actions {
+  display: flex;
   gap: var(--space-1);
 }
 
-.swatch {
-  display: inline-block;
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+.env-empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
-.swatch--gpio {
-  border-color: var(--color-accent);
-  background: var(--color-accent-bg);
+.env-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.swatch--3v3 {
-  border-color: var(--color-info);
-  background: var(--color-info-bg);
+.env-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
-.swatch--5v {
-  border-color: var(--color-danger);
-  background: var(--color-danger-bg);
+.rules-table {
+  margin-bottom: var(--space-3);
 }
 
-.swatch--gnd {
-  border-color: var(--color-text-muted);
+.rules-empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: var(--space-2) 0;
 }
 
-.swatch--id {
-  border-color: var(--color-warning);
-  background: rgba(245, 158, 11, 0.06);
-  border-style: dashed;
+.quick-add {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
-.swatch--i2c {
-  border-color: var(--color-bus-i2c-border);
-  background: var(--color-bus-i2c-bg);
+.quick-add-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
-.swatch--spi {
-  border-color: var(--color-bus-spi-border);
-  background: var(--color-bus-spi-bg);
+.quick-add-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
 }
 
-.swatch--uart {
-  border-color: var(--color-bus-uart-border);
-  background: var(--color-bus-uart-bg);
+.quick-add-device-select {
+  min-width: 200px;
 }
 
-.swatch--pwm {
-  border-color: var(--color-bus-pwm-border);
-  background: var(--color-bus-pwm-bg);
+/* Env form */
+.env-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.env-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.env-form-group-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.field-row-3 .field {
+  gap: var(--space-1);
+}
+
+.env-form-grid--dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 640px) {
+  .env-form-grid--dual {
+    grid-template-columns: 1fr;
+  }
+}
+
+.env-form-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.env-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.env-form-subtitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 </style>
