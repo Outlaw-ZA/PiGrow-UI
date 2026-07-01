@@ -1054,9 +1054,15 @@ function statusSeverity(status?: string) {
 }
 
 .env-stack {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .env-stack {
+    grid-template-columns: 1fr;
+  }
 }
 
 .env-block {
