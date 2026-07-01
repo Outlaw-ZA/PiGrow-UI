@@ -10,6 +10,16 @@
     "restriction": "off",
     "nursery": "warn"
   },
+  "env": {
+    "browser": true
+  },
+  "globals": {
+    "defineEmits": "readonly",
+    "defineExpose": "readonly",
+    "defineProps": "readonly",
+    "defineSlots": "readonly",
+    "withDefaults": "readonly"
+  },
   "rules": {
     "no-console": "warn",
     "no-debugger": "error",

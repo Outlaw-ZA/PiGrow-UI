@@ -2,6 +2,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../../stores/apiStore'
+import {
+  AutomationMode,
+  DayNightPeriod,
+  DeviceAction,
+  DeviceType,
+  RuleCondition,
+  SensorType,
+} from '../../types/grow'
 import type {
   AutomationRule,
   CreateAutomationRulePayload,
@@ -11,14 +19,10 @@ import type {
   PhaseEnvironmentPayload,
   UpdateAutomationRulePayload,
 } from '../../types/grow'
-import {
-  AutomationMode,
-  DayNightPeriod,
-  DeviceAction,
-  DeviceType,
-  RuleCondition,
-  SensorType,
-} from '../../types/grow'
+import { useAutomationRuleStore } from '../../stores/automationRuleStore'
+import { computeBoundaryCoverage } from '../../composables/useEnvRuleCoverage'
+import type { EnvRuleCoverage } from '../../composables/useEnvRuleCoverage'
+import PhaseAutomationRulesDialog from '../../components/PhaseAutomationRulesDialog.vue'
 import {
   deriveActivePhaseIndex,
   deriveGrowActive,
@@ -86,6 +90,8 @@ function genLocalKey(prefix: string): string {
 function getDefaultPhases(): GrowPhase[] {
   return [
     {
+      dayDurationMinutes: 1080,
+      dayStartMinutes: 360,
       durationDays: 7,
       endAt: null,
       isActive: false,
@@ -93,10 +99,10 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Germination',
       order: 1,
       startAt: null,
-      dayStartMinutes: 360,
-      dayDurationMinutes: 1080,
     },
     {
+      dayDurationMinutes: 1080,
+      dayStartMinutes: 360,
       durationDays: 14,
       endAt: null,
       isActive: false,
@@ -104,10 +110,10 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Seedling',
       order: 2,
       startAt: null,
-      dayStartMinutes: 360,
-      dayDurationMinutes: 1080,
     },
     {
+      dayDurationMinutes: 1080,
+      dayStartMinutes: 360,
       durationDays: 28,
       endAt: null,
       isActive: false,
@@ -115,10 +121,10 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Vegetative',
       order: 3,
       startAt: null,
-      dayStartMinutes: 360,
-      dayDurationMinutes: 1080,
     },
     {
+      dayDurationMinutes: 1080,
+      dayStartMinutes: 360,
       durationDays: 56,
       endAt: null,
       isActive: false,
@@ -126,10 +132,10 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Flowering',
       order: 4,
       startAt: null,
-      dayStartMinutes: 360,
-      dayDurationMinutes: 1080,
     },
     {
+      dayDurationMinutes: 1080,
+      dayStartMinutes: 360,
       durationDays: 14,
       endAt: null,
       isActive: false,
@@ -137,8 +143,6 @@ function getDefaultPhases(): GrowPhase[] {
       name: 'Flush',
       order: 5,
       startAt: null,
-      dayStartMinutes: 360,
-      dayDurationMinutes: 1080,
     },
   ]
 }
@@ -197,14 +201,14 @@ const activeTab = ref<'details' | 'phases'>('details')
 const showPhaseModal = ref(false)
 const editingPhaseIndex = ref<number | null>(null)
 const phaseDraft = ref<GrowPhase>({
+  dayDurationMinutes: 1080,
+  dayStartMinutes: 360,
   durationDays: 7,
   endAt: null,
   isActive: false,
   name: '',
   order: 0,
   startAt: null,
-  dayStartMinutes: 360,
-  dayDurationMinutes: 1080,
 })
 
 function dayStartTime(dayStartMinutes: number): { hours: number; minutes: number } {
@@ -279,6 +283,8 @@ const phaseDraftDateRange = computed<{ start: string; end: string }>(() => {
 function openAddPhase() {
   editingPhaseIndex.value = null
   phaseDraft.value = {
+    dayDurationMinutes: 1080,
+    dayStartMinutes: 360,
     durationDays: 7,
     endAt: null,
     isActive: false,
@@ -286,8 +292,6 @@ function openAddPhase() {
     name: '',
     order: sortedPhases.value.length + 1,
     startAt: null,
-    dayStartMinutes: 360,
-    dayDurationMinutes: 1080,
   }
   showPhaseModal.value = true
 }
@@ -300,8 +304,8 @@ function openEditPhase(idx: number) {
   editingPhaseIndex.value = idx
   phaseDraft.value = {
     ...phase,
-    dayStartMinutes: phase.dayStartMinutes ?? 360,
     dayDurationMinutes: phase.dayDurationMinutes ?? 1080,
+    dayStartMinutes: phase.dayStartMinutes ?? 360,
   }
   showPhaseModal.value = true
 }
@@ -364,14 +368,14 @@ function applyTimeToPhaseDraft() {
 
 async function savePhase(phase: GrowPhase, cycleId?: string): Promise<GrowPhase | null> {
   const payload = {
+    dayDurationMinutes: phase.dayDurationMinutes,
+    dayStartMinutes: phase.dayStartMinutes,
     durationDays: phase.durationDays,
     endAt: phase.endAt,
     isActive: phase.isActive,
     name: phase.name,
     order: phase.order,
     startAt: phase.startAt,
-    dayStartMinutes: phase.dayStartMinutes,
-    dayDurationMinutes: phase.dayDurationMinutes,
   }
   if (phase.id) {
     return await store.updateGrowPhase(phase.id, payload)
@@ -403,27 +407,6 @@ async function reconcileActivePhase() {
   }
 }
 
-// ---------- Expandable phase panels: environment + automation ----------
-
-const expandedPhaseKey = ref<string | null>(null)
-
-function toggleExpand(localKey: string) {
-  expandedPhaseKey.value = expandedPhaseKey.value === localKey ? null : localKey
-}
-
-// Auto-expand active phase on mount in edit mode
-onMounted(async () => {
-  if (isEditMode.value) {
-    const activeIdx = deriveActivePhaseIndex(sortedPhases.value)
-    if (activeIdx >= 0) {
-      const active = sortedPhases.value[activeIdx]
-      if (active?.localKey) {
-        expandedPhaseKey.value = active.localKey
-      }
-    }
-  }
-})
-
 // ---------- Environment ----------
 
 interface PhaseEnvCache {
@@ -441,8 +424,8 @@ function getEnvCache(phase: GrowPhase): PhaseEnvCache {
   if (!envCache.value[key]) {
     envCache.value[key] = {
       day: null,
-      night: null,
       loading: false,
+      night: null,
       savingDay: false,
       savingNight: false,
     }
@@ -451,7 +434,9 @@ function getEnvCache(phase: GrowPhase): PhaseEnvCache {
 }
 
 async function loadPhaseEnv(phase: GrowPhase) {
-  if (!phase.id) return
+  if (!phase.id) {
+    return
+  }
   const cache = getEnvCache(phase)
   cache.loading = true
   try {
@@ -459,7 +444,7 @@ async function loadPhaseEnv(phase: GrowPhase) {
     cache.day = data.day
     cache.night = data.night
   } catch {
-    // non-fatal
+    // Non-fatal
   } finally {
     cache.loading = false
   }
@@ -471,14 +456,22 @@ async function savePhaseEnv(
   payload: PhaseEnvironmentPayload,
   options: { silent?: boolean } = {},
 ) {
-  if (!phase.id) return
+  if (!phase.id) {
+    return
+  }
   const cache = getEnvCache(phase)
-  if (period === 'DAY') cache.savingDay = true
-  else cache.savingNight = true
+  if (period === 'DAY') {
+    cache.savingDay = true
+  } else {
+    cache.savingNight = true
+  }
   try {
     const saved = await store.upsertPhaseEnvironment(phase.id, period, payload)
-    if (period === 'DAY') cache.day = saved
-    else cache.night = saved
+    if (period === 'DAY') {
+      cache.day = saved
+    } else {
+      cache.night = saved
+    }
     return saved
   } catch (error) {
     if (!options.silent) {
@@ -487,29 +480,44 @@ async function savePhaseEnv(
     }
     throw error
   } finally {
-    if (period === 'DAY') cache.savingDay = false
-    else cache.savingNight = false
+    if (period === 'DAY') {
+      cache.savingDay = false
+    } else {
+      cache.savingNight = false
+    }
   }
 }
 
+// oxlint-disable-next-line require-await
 async function clearPhaseEnv(phase: GrowPhase, period: 'DAY' | 'NIGHT') {
   const phaseId = phase.id
-  if (!phaseId) return
+  if (!phaseId) {
+    return
+  }
   confirm.require({
     accept: async () => {
       const cache = getEnvCache(phase)
-      if (period === 'DAY') cache.savingDay = true
-      else cache.savingNight = true
+      if (period === 'DAY') {
+        cache.savingDay = true
+      } else {
+        cache.savingNight = true
+      }
       try {
         await store.deletePhaseEnvironment(phaseId, period)
-        if (period === 'DAY') cache.day = null
-        else cache.night = null
+        if (period === 'DAY') {
+          cache.day = null
+        } else {
+          cache.night = null
+        }
       } catch (error) {
         const { message } = extractApiError(error, 'Failed to clear environment')
         toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
       } finally {
-        if (period === 'DAY') cache.savingDay = false
-        else cache.savingNight = false
+        if (period === 'DAY') {
+          cache.savingDay = false
+        } else {
+          cache.savingNight = false
+        }
       }
     },
     acceptLabel: 'Clear',
@@ -560,7 +568,7 @@ async function openEnvDialog(phase: GrowPhase) {
   showEnvForm.value = true
   envDialogLoading.value = true
   try {
-    await loadPhaseEnv(phase)
+    await Promise.all([loadPhaseEnv(phase), loadPhaseRules(phase)])
     const cache = getEnvCache(phase)
     envDraftDay.value = envPayloadFromCache(cache.day)
     envDraftNight.value = envPayloadFromCache(cache.night)
@@ -576,7 +584,9 @@ function closeEnvDialog() {
 
 async function saveEnvDialog() {
   const phase = envEditingPhase.value
-  if (!phase) return
+  if (!phase) {
+    return
+  }
   const [dayRes, nightRes] = await Promise.allSettled([
     savePhaseEnv(phase, 'DAY', envDraftDay.value, { silent: true }),
     savePhaseEnv(phase, 'NIGHT', envDraftNight.value, { silent: true }),
@@ -592,8 +602,12 @@ async function saveEnvDialog() {
     return
   }
   const failed: string[] = []
-  if (dayRes.status === 'rejected') failed.push('Day')
-  if (nightRes.status === 'rejected') failed.push('Night')
+  if (dayRes.status === 'rejected') {
+    failed.push('Day')
+  }
+  if (nightRes.status === 'rejected') {
+    failed.push('Night')
+  }
   toast.add({
     detail: `${failed.join(' and ')} save failed`,
     life: 6000,
@@ -608,75 +622,72 @@ function envDraftFor(period: 'DAY' | 'NIGHT'): PhaseEnvironmentPayload {
 
 const envIsSaving = computed(() => {
   const phase = envEditingPhase.value
-  if (!phase) return false
+  if (!phase) {
+    return false
+  }
   const cache = getEnvCache(phase)
   return cache.savingDay || cache.savingNight
 })
 
-// ---------- Automation ----------
+// ---------- Automation rules dialog ----------
 
-interface RulesCache {
-  rules: AutomationRule[]
-  loading: boolean
+const ruleStore = useAutomationRuleStore()
+
+const showRulesDialog = ref(false)
+const rulesEditingPhase = ref<GrowPhase | null>(null)
+const rulesLoading = ref(false)
+const phaseRules = ref<Record<string, AutomationRule[]>>({})
+
+function openRulesDialog(phase: GrowPhase) {
+  rulesEditingPhase.value = phase
+  showRulesDialog.value = true
 }
 
-const rulesCache = ref<Record<string, RulesCache>>({})
+function closeRulesDialog() {
+  showRulesDialog.value = false
+  rulesEditingPhase.value = null
+}
 
-function getRulesCache(phase: GrowPhase): RulesCache {
-  const key = phase.localKey!
-  if (!rulesCache.value[key]) {
-    rulesCache.value[key] = { rules: [], loading: false }
+async function onRulesChanged() {
+  const phase = rulesEditingPhase.value
+  if (phase) {
+    await refreshPhaseRules(phase)
   }
-  return rulesCache.value[key]
 }
 
 async function loadPhaseRules(phase: GrowPhase) {
-  if (!phase.id) return
-  const cache = getRulesCache(phase)
-  cache.loading = true
-  try {
-    cache.rules = await store.fetchRulesByPhase(phase.id)
-  } catch {
-    // non-fatal
-  } finally {
-    cache.loading = false
+  if (!phase.id) {
+    return
   }
-}
-
-async function toggleRule(phase: GrowPhase, rule: AutomationRule) {
+  rulesLoading.value = true
   try {
-    const updated = await store.toggleRule(rule.id)
-    const cache = getRulesCache(phase)
-    const idx = cache.rules.findIndex((r) => r.id === rule.id)
-    if (idx !== -1) cache.rules[idx] = updated
+    const list = await ruleStore.fetchRulesByPhase(phase.id)
+    phaseRules.value[phase.localKey!] = list
   } catch (error) {
-    const { message } = extractApiError(error, 'Failed to toggle rule')
-    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Toggle failed' })
+    const { message } = extractApiError(error, 'Failed to load rules')
+    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Load failed' })
+  } finally {
+    rulesLoading.value = false
   }
 }
 
-async function deleteRule(phase: GrowPhase, rule: AutomationRule) {
-  confirm.require({
-    accept: async () => {
-      try {
-        await store.deleteRule(rule.id)
-        const cache = getRulesCache(phase)
-        cache.rules = cache.rules.filter((r) => r.id !== rule.id)
-      } catch (error) {
-        const { message } = extractApiError(error, 'Failed to delete rule')
-        toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
-      }
-    },
-    acceptLabel: 'Delete',
-    acceptProps: { severity: 'danger' },
-    header: 'Delete rule',
-    icon: 'pi pi-exclamation-triangle',
-    message: `Remove this automation rule for "${phase.name}"?`,
-    rejectLabel: 'Cancel',
-  })
+async function refreshPhaseRules(phase: GrowPhase) {
+  if (!phase.id) {
+    return
+  }
+  try {
+    const list = await ruleStore.fetchRulesByPhase(phase.id)
+    phaseRules.value[phase.localKey!] = list
+  } catch {
+    // Non-fatal
+  }
 }
 
-// ---------- Quick-add ----------
+function getPhaseRules(phase: GrowPhase): AutomationRule[] {
+  return phaseRules.value[phase.localKey!] ?? []
+}
+
+// ---------- Env→Rules coverage + auto-create ----------
 
 const controllerDevices = computed<Device[]>(
   () =>
@@ -687,35 +698,32 @@ const controllerDevices = computed<Device[]>(
     )?.devices ?? [],
 )
 
-const quickAddDeviceId = ref<string[]>([])
+const envRuleCoverage = computed<EnvRuleCoverage | null>(() => {
+  const phase = envEditingPhase.value
+  if (!phase) {
+    return null
+  }
+  return computeBoundaryCoverage(
+    envDraftDay.value,
+    envDraftNight.value,
+    getPhaseRules(phase),
+    controllerDevices.value,
+  )
+})
 
-const QUICK_ADD_TEMPLATES: Array<{
-  label: string
+interface AutoCreateTemplate {
   deviceTypes: DeviceType[]
   watchedSensorType: SensorType
   condition: RuleCondition
   action: DeviceAction
   period: DayNightPeriod | null
-}> = [
+  boundary: { payloadKey: 'temp' | 'humidity' | 'co2'; side: 'min' | 'max' }
+}
+
+const AUTO_CREATE_TEMPLATES: AutoCreateTemplate[] = [
   {
-    label: 'Light — Day start',
     action: DeviceAction.ON,
-    condition: RuleCondition.SCHEDULE_ON,
-    deviceTypes: [DeviceType.LIGHT],
-    period: DayNightPeriod.DAY,
-    watchedSensorType: SensorType.TEMPERATURE,
-  },
-  {
-    label: 'Light — Night start',
-    action: DeviceAction.OFF,
-    condition: RuleCondition.SCHEDULE_OFF,
-    deviceTypes: [DeviceType.LIGHT],
-    period: DayNightPeriod.NIGHT,
-    watchedSensorType: SensorType.TEMPERATURE,
-  },
-  {
-    label: 'Exhaust/Intake Fan — Above max temp',
-    action: DeviceAction.ON,
+    boundary: { payloadKey: 'temp', side: 'max' },
     condition: RuleCondition.ABOVE_MAX,
     deviceTypes: [
       DeviceType.EXHAUST_FAN,
@@ -727,89 +735,142 @@ const QUICK_ADD_TEMPLATES: Array<{
     watchedSensorType: SensorType.TEMPERATURE,
   },
   {
-    label: 'Heater — Below min temp',
     action: DeviceAction.ON,
+    boundary: { payloadKey: 'temp', side: 'min' },
     condition: RuleCondition.BELOW_MIN,
     deviceTypes: [DeviceType.HEATER],
     period: null,
     watchedSensorType: SensorType.TEMPERATURE,
   },
   {
-    label: 'Humidifier — Below min humidity',
     action: DeviceAction.ON,
+    boundary: { payloadKey: 'humidity', side: 'min' },
     condition: RuleCondition.BELOW_MIN,
     deviceTypes: [DeviceType.HUMIDIFIER],
     period: null,
     watchedSensorType: SensorType.HUMIDITY,
   },
   {
-    label: 'Dehumidifier — Above max humidity',
     action: DeviceAction.ON,
+    boundary: { payloadKey: 'humidity', side: 'max' },
     condition: RuleCondition.ABOVE_MAX,
     deviceTypes: [DeviceType.DEHUMIDIFIER],
     period: null,
     watchedSensorType: SensorType.HUMIDITY,
   },
   {
-    label: 'CO₂ — Below min CO₂ (day)',
     action: DeviceAction.ON,
+    boundary: { payloadKey: 'co2', side: 'min' },
     condition: RuleCondition.BELOW_MIN,
     deviceTypes: [DeviceType.CO2_INJECTOR],
-    period: DayNightPeriod.DAY,
+    period: null,
     watchedSensorType: SensorType.CO2,
   },
 ]
 
-async function quickAddRule(phase: GrowPhase, template: (typeof QUICK_ADD_TEMPLATES)[number]) {
-  const deviceIds = quickAddDeviceId.value
-  if (!phase.id || deviceIds.length === 0) {
+const autoCreateBusy = ref(false)
+
+function existingRuleKey(
+  rule: AutomationRule,
+  boundary: { payloadKey: 'temp' | 'humidity' | 'co2'; side: 'min' | 'max' },
+): string {
+  const condition = boundary.side === 'max' ? RuleCondition.ABOVE_MAX : RuleCondition.BELOW_MIN
+  return `${rule.deviceId}|${rule.watchedSensorType}|${condition}|${rule.period ?? 'null'}`
+}
+
+async function autoCreateFromEnv() {
+  const phase = envEditingPhase.value
+  const coverage = envRuleCoverage.value
+  if (!phase?.id || !coverage) {
+    return
+  }
+  const phaseId = phase.id
+
+  const devices = controllerDevices.value.filter((d) => d.isActive)
+  const existing = getPhaseRules(phase)
+  const existingKeys = new Set<string>()
+  for (const rule of existing) {
+    const tpl = AUTO_CREATE_TEMPLATES.find(
+      (t) =>
+        t.condition === rule.condition &&
+        t.watchedSensorType === rule.watchedSensorType &&
+        t.boundary.payloadKey &&
+        t.boundary.side === (rule.condition === RuleCondition.ABOVE_MAX ? 'max' : 'min'),
+    )
+    if (tpl) {
+      existingKeys.add(existingRuleKey(rule, tpl.boundary))
+    }
+  }
+
+  const toCreate: { deviceId: string; template: AutoCreateTemplate }[] = []
+  for (const tpl of AUTO_CREATE_TEMPLATES) {
+    const boundaryKey =
+      tpl.boundary.side === 'max'
+        ? `${tpl.boundary.payloadKey}Max`
+        : `${tpl.boundary.payloadKey}Min`
+    const covered = coverage.boundaries.find((b) => b.key === boundaryKey)
+    if (!covered?.isSetAny) {
+      continue
+    }
+
+    for (const dev of devices) {
+      if (!tpl.deviceTypes.includes(dev.type)) {
+        continue
+      }
+      const key = `${dev.id}|${tpl.watchedSensorType}|${tpl.condition}|${tpl.period ?? 'null'}`
+      if (existingKeys.has(key)) {
+        continue
+      }
+      toCreate.push({ deviceId: dev.id, template: tpl })
+    }
+  }
+
+  if (toCreate.length === 0) {
     toast.add({
-      detail: 'Select a device first.',
+      detail: 'No matching devices or no unmatched thresholds.',
       life: 4000,
-      severity: 'warn',
-      summary: 'No device selected',
+      severity: 'info',
+      summary: 'Nothing to create',
     })
     return
   }
-  const cache = getRulesCache(phase)
+
+  autoCreateBusy.value = true
   try {
-    for (const dId of deviceIds) {
-      const payload: CreateAutomationRulePayload = {
-        action: template.action,
-        condition: template.condition,
-        cooldownSeconds: 180,
-        deviceId: dId,
-        enabled: true,
-        growPhaseId: phase.id,
-        period: template.period,
-        watchedSensorType: template.watchedSensorType,
-      }
-      const created = await store.createRule(payload)
-      cache.rules.push(created)
+    const results = await Promise.allSettled(
+      toCreate.map(({ deviceId, template }) =>
+        ruleStore.createRule({
+          action: template.action,
+          condition: template.condition,
+          cooldownSeconds: 180,
+          deviceId,
+          enabled: true,
+          growPhaseId: phaseId,
+          period: template.period,
+          watchedSensorType: template.watchedSensorType,
+        }),
+      ),
+    )
+    const failed = results.filter((r) => r.status === 'rejected').length
+    await refreshPhaseRules(phase)
+    if (failed === 0) {
+      toast.add({
+        detail: `Created ${toCreate.length} rule${toCreate.length > 1 ? 's' : ''} from environment.`,
+        life: 4000,
+        severity: 'success',
+        summary: 'Rules created',
+      })
+    } else {
+      const { message } = extractApiError(
+        results.find((r) => r.status === 'rejected')?.reason,
+        `Created ${toCreate.length - failed} rules; ${failed} failed.`,
+      )
+      toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Some rules failed' })
     }
-    quickAddDeviceId.value = []
-    toast.add({
-      detail: `Rule${deviceIds.length > 1 ? 's' : ''} added.`,
-      life: 3000,
-      severity: 'success',
-      summary: 'Rule created',
-    })
-  } catch (error) {
-    const { message } = extractApiError(error, 'Failed to create rule')
-    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Create failed' })
+  } finally {
+    autoCreateBusy.value = false
   }
 }
-
-// Watch expanded phase → load env + rules
-watch(
-  () => expandedPhaseKey.value,
-  async (key) => {
-    if (!key || !isEditMode.value) return
-    const phase = phases.value.find((p) => p.localKey === key)
-    if (!phase) return
-    await Promise.all([loadPhaseEnv(phase), loadPhaseRules(phase)])
-  },
-)
 
 // ---------- Save ---------
 
@@ -1018,7 +1079,7 @@ function fmtTime(dayStartMinutes: number): string {
                       />
                     </template>
                   </Column>
-                  <Column header="Actions" style="width: 120px">
+                  <Column header="Actions" style="width: 160px">
                     <template #body="slotProps">
                       <div class="row-actions">
                         <Button
@@ -1043,6 +1104,19 @@ function fmtTime(dayStartMinutes: number): string {
                           @click.stop="openEnvDialog(slotProps.data)"
                         />
                         <Button
+                          icon="pi pi-bolt"
+                          severity="warn"
+                          text
+                          rounded
+                          size="small"
+                          aria-label="Edit automation rules"
+                          :disabled="!slotProps.data.id || rulesLoading"
+                          v-tooltip.top="
+                            slotProps.data.id ? 'Automation Rules' : 'Save the grow first'
+                          "
+                          @click.stop="openRulesDialog(slotProps.data)"
+                        />
+                        <Button
                           icon="pi pi-trash"
                           severity="danger"
                           text
@@ -1055,154 +1129,6 @@ function fmtTime(dayStartMinutes: number): string {
                       </div>
                     </template>
                   </Column>
-                  <Column header="" style="width: 48px">
-                    <template #body="slotProps">
-                      <Button
-                        :icon="
-                          expandedPhaseKey === slotProps.data.localKey
-                            ? 'pi pi-chevron-up'
-                            : 'pi pi-chevron-down'
-                        "
-                        text
-                        rounded
-                        size="small"
-                        severity="secondary"
-                        :aria-label="
-                          expandedPhaseKey === slotProps.data.localKey ? 'Collapse' : 'Expand'
-                        "
-                        @click="toggleExpand(slotProps.data.localKey!)"
-                      />
-                    </template>
-                  </Column>
-
-                  <template #expansion="slotProps">
-                    <div
-                      v-if="expandedPhaseKey === slotProps.data.localKey"
-                      class="phase-expansion"
-                    >
-                      <!-- Automation -->
-                      <div class="expansion-section">
-                        <div class="expansion-section-header">
-                          <h4 class="expansion-section-title">Automation Rules</h4>
-                          <p class="expansion-section-hint">
-                            {{
-                              isEditMode
-                                ? 'Rules drive device actuation for this phase.'
-                                : 'Save the grow first to configure automation rules.'
-                            }}
-                          </p>
-                        </div>
-
-                        <div v-if="!isEditMode" class="env-locked-hint">
-                          <i class="pi pi-lock" />
-                          Save the grow to enable automation rules.
-                        </div>
-
-                        <template v-else>
-                          <div v-if="getRulesCache(slotProps.data).loading" class="env-loading">
-                            <i class="pi pi-spin pi-spinner" /> Loading…
-                          </div>
-
-                          <template v-else>
-                            <DataTable
-                              v-if="getRulesCache(slotProps.data).rules.length > 0"
-                              :value="getRulesCache(slotProps.data).rules"
-                              size="small"
-                              class="rules-table"
-                            >
-                              <Column field="deviceId" header="Device">
-                                <template #body="ruleSlot">
-                                  {{
-                                    controllerDevices.find((d) => d.id === ruleSlot.data.deviceId)
-                                      ?.name ?? ruleSlot.data.deviceId
-                                  }}
-                                </template>
-                              </Column>
-                              <Column field="watchedSensorType" header="Sensor" />
-                              <Column field="condition" header="Condition" />
-                              <Column field="action" header="Action">
-                                <template #body="ruleSlot">
-                                  <Tag
-                                    :value="ruleSlot.data.action"
-                                    :severity="
-                                      ruleSlot.data.action === 'ON' ? 'success' : 'secondary'
-                                    "
-                                    rounded
-                                  />
-                                </template>
-                              </Column>
-                              <Column field="period" header="Period">
-                                <template #body="ruleSlot">
-                                  <span class="type-pill">
-                                    {{ ruleSlot.data.period ?? 'Both' }}
-                                  </span>
-                                </template>
-                              </Column>
-                              <Column field="cooldownSeconds" header="Cooldown" />
-                              <Column header="Enabled" style="width: 80px">
-                                <template #body="ruleSlot">
-                                  <InputSwitch
-                                    :modelValue="ruleSlot.data.enabled"
-                                    @update:modelValue="toggleRule(slotProps.data, ruleSlot.data)"
-                                  />
-                                </template>
-                              </Column>
-                              <Column header="Last Triggered">
-                                <template #body="ruleSlot">
-                                  <span v-if="ruleSlot.data.lastTriggeredAt" class="meta-code">
-                                    {{ ruleSlot.data.lastTriggeredAt }}
-                                  </span>
-                                  <span v-else class="muted">Never</span>
-                                </template>
-                              </Column>
-                              <Column header="" style="width: 60px">
-                                <template #body="ruleSlot">
-                                  <Button
-                                    icon="pi pi-trash"
-                                    text
-                                    rounded
-                                    size="small"
-                                    severity="danger"
-                                    v-tooltip.top="'Delete rule'"
-                                    @click="deleteRule(slotProps.data, ruleSlot.data)"
-                                  />
-                                </template>
-                              </Column>
-                            </DataTable>
-
-                            <div v-else class="rules-empty">
-                              No rules configured for this phase.
-                            </div>
-
-                            <!-- Quick-add -->
-                            <div class="quick-add">
-                              <h5 class="quick-add-title">Quick-add rules</h5>
-                              <div class="quick-add-controls">
-                                <MultiSelect
-                                  v-model="quickAddDeviceId"
-                                  :options="controllerDevices"
-                                  optionLabel="name"
-                                  optionValue="id"
-                                  placeholder="Select device(s)"
-                                  class="quick-add-device-select"
-                                  display="chip"
-                                />
-                                <Button
-                                  v-for="tmpl in QUICK_ADD_TEMPLATES"
-                                  :key="tmpl.label"
-                                  :label="tmpl.label"
-                                  size="small"
-                                  severity="secondary"
-                                  :disabled="!slotProps.data.id || quickAddDeviceId.length === 0"
-                                  @click="quickAddRule(slotProps.data, tmpl)"
-                                />
-                              </div>
-                            </div>
-                          </template>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
                 </DataTable>
 
                 <div v-else class="empty-state">
@@ -1329,6 +1255,59 @@ function fmtTime(dayStartMinutes: number): string {
         <i class="pi pi-spin pi-spinner" /> Loading environment…
       </div>
       <div v-else class="form-stack">
+        <div
+          v-if="envRuleCoverage && envRuleCoverage.uncoveredCount > 0"
+          class="env-coverage-banner env-coverage-warn"
+        >
+          <div class="env-coverage-content">
+            <i class="pi pi-exclamation-triangle" />
+            <div>
+              <strong>No rule will fire on these thresholds yet.</strong>
+              <ul class="env-coverage-list">
+                <li
+                  v-for="b in envRuleCoverage.boundaries.filter(
+                    (b) => b.isSetAny && !b.hasMatchingRule,
+                  )"
+                  :key="b.key"
+                >
+                  {{ b.label }} ({{ b.side === 'max' ? 'max' : 'min'
+                  }}{{
+                    b.setInDay && b.setInNight ? ', day & night' : b.setInDay ? ', day' : ', night'
+                  }})
+                </li>
+              </ul>
+            </div>
+          </div>
+          <Button
+            label="Create default rules"
+            icon="pi pi-bolt"
+            severity="warn"
+            size="small"
+            :loading="autoCreateBusy"
+            @click="autoCreateFromEnv"
+          />
+        </div>
+
+        <div
+          v-else-if="envRuleCoverage && envRuleCoverage.blockedCount > 0"
+          class="env-coverage-banner env-coverage-info"
+        >
+          <div class="env-coverage-content">
+            <i class="pi pi-info-circle" />
+            <div>
+              <strong>Some matching rules are blocked by device mode.</strong>
+              <ul class="env-coverage-list">
+                <li
+                  v-for="b in envRuleCoverage.boundaries.filter((b) => b.blockingDeviceCount > 0)"
+                  :key="b.key"
+                >
+                  {{ b.label }} — blocked by: {{ b.blockingDeviceNames.join(', ') }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         <div class="env-form-grid">
           <div v-for="period in ['DAY', 'NIGHT'] as const" :key="period" class="env-form-group">
             <div class="env-form-group-header">
@@ -1355,14 +1334,17 @@ function fmtTime(dayStartMinutes: number): string {
                 <div class="field">
                   <label class="field-label">Min</label>
                   <InputNumber v-model="envDraftFor(period).tempMin" placeholder="e.g. 18" />
+                  <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
                   <InputNumber v-model="envDraftFor(period).tempTarget" placeholder="e.g. 22" />
+                  <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
                   <InputNumber v-model="envDraftFor(period).tempMax" placeholder="e.g. 28" />
+                  <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
             </div>
@@ -1372,14 +1354,17 @@ function fmtTime(dayStartMinutes: number): string {
                 <div class="field">
                   <label class="field-label">Min</label>
                   <InputNumber v-model="envDraftFor(period).humidityMin" placeholder="e.g. 50" />
+                  <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
                   <InputNumber v-model="envDraftFor(period).humidityTarget" placeholder="e.g. 65" />
+                  <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
                   <InputNumber v-model="envDraftFor(period).humidityMax" placeholder="e.g. 80" />
+                  <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
             </div>
@@ -1389,20 +1374,26 @@ function fmtTime(dayStartMinutes: number): string {
                 <div class="field">
                   <label class="field-label">Min</label>
                   <InputNumber v-model="envDraftFor(period).co2Min" placeholder="e.g. 800" />
+                  <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
                   <InputNumber v-model="envDraftFor(period).co2Target" placeholder="e.g. 1200" />
+                  <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
                   <InputNumber v-model="envDraftFor(period).co2Max" placeholder="e.g. 1500" />
+                  <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <p class="field-hint">Leave blank to leave a threshold unconstrained.</p>
+        <p class="field-hint">
+          Leave blank to leave a threshold unconstrained. Targets are stored but not yet used by
+          automation.
+        </p>
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" size="small" @click="closeEnvDialog" />
@@ -1416,6 +1407,14 @@ function fmtTime(dayStartMinutes: number): string {
         />
       </template>
     </Dialog>
+
+    <!-- Automation rules dialog -->
+    <PhaseAutomationRulesDialog
+      v-model:visible="showRulesDialog"
+      :phase="rulesEditingPhase"
+      :devices="controllerDevices"
+      @changed="onRulesChanged"
+    />
   </div>
 </template>
 
@@ -1653,151 +1652,6 @@ function fmtTime(dayStartMinutes: number): string {
   margin-top: 0.25rem;
 }
 
-/* Expandable row */
-.phase-expansion {
-  padding: var(--space-4) var(--space-4) var(--space-4) calc(1rem + 60px);
-  background: var(--color-bg-base);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.expansion-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.expansion-section-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.expansion-section-title {
-  margin: 0;
-  font-size: var(--text-base);
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
-.expansion-section-hint {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.env-locked-hint {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  font-style: italic;
-  padding: var(--space-3) 0;
-}
-
-.env-loading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  padding: var(--space-2) 0;
-}
-
-.env-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-}
-
-.env-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
-  background: var(--color-bg-elevated);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.env-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.env-card-title {
-  font-size: var(--text-sm);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
-}
-
-.env-card-actions {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.env-empty {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.env-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.env-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-.rules-table {
-  margin-bottom: var(--space-3);
-}
-
-.rules-empty {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  font-style: italic;
-  padding: var(--space-2) 0;
-}
-
-.quick-add {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.quick-add-title {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.quick-add-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.quick-add-device-select {
-  min-width: 200px;
-}
-
 /* Env form */
 .env-form-grid {
   display: flex;
@@ -1849,5 +1703,68 @@ function fmtTime(dayStartMinutes: number): string {
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.field-micro-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  line-height: 1.2;
+}
+
+.env-coverage-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid;
+}
+
+.env-coverage-warn {
+  background: color-mix(in srgb, var(--color-warn) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-warn) 40%, transparent);
+  color: var(--color-text-primary);
+}
+
+.env-coverage-info {
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 40%, transparent);
+  color: var(--color-text-primary);
+}
+
+.env-coverage-content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.env-coverage-content > i {
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+
+.env-coverage-content > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.env-coverage-content strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.env-coverage-list {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.env-coverage-list li {
+  margin: 0.125rem 0;
 }
 </style>

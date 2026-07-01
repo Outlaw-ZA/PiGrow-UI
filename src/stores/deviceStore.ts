@@ -2,104 +2,101 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 import type { Device, DeviceSeed } from '../types/grow'
 import { API_BASE } from './apiBase'
-import { useGrowCycleStore } from './growCycleStore'
+import { useControllerStore } from './controllerStore'
 
 export const useDeviceStore = defineStore('device', () => {
-  async function fetchDevices(growCycleId: string) {
-    const res = await axios.get(`${API_BASE}/devices/grow-cycle/${growCycleId}`)
+  function findController(controllerId: string) {
+    const { controllers } = useControllerStore()
+    return controllers.find((c) => c.id === controllerId) as
+      | ((typeof controllers)[number] & { devices?: Device[] })
+      | undefined
+  }
+
+  function findDeviceOnController(controllerId: string, deviceId: string): Device | undefined {
+    return findController(controllerId)?.devices?.find((d) => d.id === deviceId)
+  }
+
+  function ensureDevicesArray(controllerId: string): Device[] | undefined {
+    const controller = findController(controllerId)
+    if (!controller) {
+      return undefined
+    }
+    if (!controller.devices) {
+      controller.devices = []
+    }
+    return controller.devices
+  }
+
+  async function fetchDevices(controllerId: string) {
+    const res = await axios.get(`${API_BASE}/devices/controller/${controllerId}`)
     const devices = res.data as Device[]
-    const { growCycles } = useGrowCycleStore()
-    const idx = growCycles.findIndex((g) => g.id === growCycleId)
-    if (idx !== -1) {
-      growCycles[idx] = { ...growCycles[idx] } as (typeof growCycles)[number]
-      ;(growCycles[idx] as { devices?: Device[] }).devices = devices
+    const arr = ensureDevicesArray(controllerId)
+    if (arr) {
+      arr.splice(0, arr.length, ...devices)
     }
     return devices
   }
 
-  function setDevicesOnGrow(growCycleId: string, devices: Device[]) {
-    const { growCycles } = useGrowCycleStore()
-    const idx = growCycles.findIndex((g) => g.id === growCycleId)
+  function updateDeviceInCache(controllerId: string, device: Partial<Device> & { id: string }) {
+    const arr = ensureDevicesArray(controllerId)
+    if (!arr) {
+      return
+    }
+    const idx = arr.findIndex((d) => d.id === device.id)
     if (idx !== -1) {
-      ;(growCycles[idx] as { devices?: Device[] }).devices = devices
+      const found = arr[idx]
+      if (found) {
+        Object.assign(found, device)
+      }
     }
   }
 
-  function findDeviceInGrow(growCycleId: string, deviceId: string): Device | undefined {
-    const { growCycles } = useGrowCycleStore()
-    const cycle = growCycles.find((g) => g.id === growCycleId) as
-      | ((typeof growCycles)[number] & { devices?: Device[] })
-      | undefined
-    return cycle?.devices?.find((d) => d.id === deviceId)
-  }
-
-  function updateDeviceInCache(device: Device) {
-    const found = findDeviceInGrow(device.growCycleId, device.id)
-    if (found) {
-      Object.assign(found, device)
+  function removeDeviceFromCache(controllerId: string, deviceId: string) {
+    const arr = ensureDevicesArray(controllerId)
+    if (arr) {
+      const idx = arr.findIndex((d) => d.id === deviceId)
+      if (idx !== -1) {
+        arr.splice(idx, 1)
+      }
     }
   }
 
-  function removeDeviceFromCache(growCycleId: string, deviceId: string) {
-    const { growCycles } = useGrowCycleStore()
-    const cycle = growCycles.find((g) => g.id === growCycleId) as
-      | ((typeof growCycles)[number] & { devices?: Device[] })
-      | undefined
-    if (cycle?.devices) {
-      cycle.devices = cycle.devices.filter((d) => d.id !== deviceId)
-    }
-  }
-
-  async function createDevice(payload: { growCycleId: string } & DeviceSeed) {
-    const res = await axios.post(`${API_BASE}/devices`, payload)
+  async function createDevice(payload: { controllerId: string } & DeviceSeed) {
+    const { controllerId, ...seed } = payload
+    const res = await axios.post(`${API_BASE}/devices`, { controllerId, ...seed })
     const created = res.data as Device
-    const { growCycles } = useGrowCycleStore()
-    const cycle = growCycles.find((g) => g.id === payload.growCycleId) as
-      | ((typeof growCycles)[number] & { devices?: Device[] })
-      | undefined
-    if (cycle) {
-      if (!cycle.devices) {
-        cycle.devices = []
-      }
-      cycle.devices.push(created)
+    const arr = ensureDevicesArray(controllerId)
+    if (arr) {
+      arr.push(created)
     }
     return created
   }
 
-  async function createDevicesBatch(growCycleId: string, devices: DeviceSeed[]) {
-    const res = await axios.post(`${API_BASE}/devices/batch`, { devices, growCycleId })
+  async function createDevicesBatch(controllerId: string, devices: DeviceSeed[]) {
+    const res = await axios.post(`${API_BASE}/devices/batch`, { controllerId, devices })
     const created = res.data as Device[]
-    const { growCycles } = useGrowCycleStore()
-    const cycle = growCycles.find((g) => g.id === growCycleId) as
-      | ((typeof growCycles)[number] & { devices?: Device[] })
-      | undefined
-    if (cycle) {
-      if (!cycle.devices) {
-        cycle.devices = []
-      }
-      cycle.devices.push(...created)
+    const arr = ensureDevicesArray(controllerId)
+    if (arr) {
+      arr.push(...created)
     }
     return created
   }
 
-  async function updateDevice(id: string, growCycleId: string, payload: Partial<DeviceSeed>) {
+  async function updateDevice(id: string, controllerId: string, payload: Partial<DeviceSeed>) {
     const res = await axios.put(`${API_BASE}/devices/${id}`, payload)
     const updated = res.data as Device
-    updateDeviceInCache({ ...updated, growCycleId })
+    updateDeviceInCache(controllerId, updated)
     return updated
   }
 
-  async function deleteDevice(id: string, growCycleId: string) {
+  async function deleteDevice(id: string, controllerId: string) {
     await axios.delete(`${API_BASE}/devices/${id}`)
-    removeDeviceFromCache(growCycleId, id)
+    removeDeviceFromCache(controllerId, id)
   }
 
-  async function sendDeviceCommand(deviceId: string, growCycleId: string, action: 'ON' | 'OFF') {
+  async function sendDeviceCommand(deviceId: string, controllerId: string, action: 'ON' | 'OFF') {
     await axios.post(`${API_BASE}/devices/${deviceId}/command`, { action })
-    const found = findDeviceInGrow(growCycleId, deviceId)
-    if (found) {
-      found.isActive = action === 'ON'
-    }
+    updateDeviceInCache(controllerId, { id: deviceId, isActive: action === 'ON' })
   }
 
   return {
@@ -107,10 +104,9 @@ export const useDeviceStore = defineStore('device', () => {
     createDevicesBatch,
     deleteDevice,
     fetchDevices,
-    findDeviceInGrow,
+    findDeviceOnController,
     removeDeviceFromCache,
     sendDeviceCommand,
-    setDevicesOnGrow,
     updateDevice,
     updateDeviceInCache,
   }

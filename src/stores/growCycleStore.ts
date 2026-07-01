@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
-import type { DeviceSeed, GrowCycle, GrowCycleListItem } from '../types/grow'
+import type { GrowCycle, GrowCycleListItem } from '../types/grow'
 import { API_BASE } from './apiBase'
 
 function toListItem(cycle: GrowCycle): GrowCycleListItem {
@@ -25,7 +25,6 @@ export interface CreateGrowCyclePayload {
   controllerId: string
   isActive?: boolean
   startAt?: string
-  devices: DeviceSeed[]
 }
 
 export interface UpdateGrowCyclePayload {
@@ -57,8 +56,8 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
   }
 
   async function createGrowCycle(payload: CreateGrowCyclePayload) {
-    const { startAt, isActive, devices, ...rest } = payload
-    const createBody = { ...rest, devices, isActive }
+    const { startAt, isActive, ...rest } = payload
+    const createBody = { ...rest, isActive }
     const res = await axios.post(`${API_BASE}/grow-cycles`, createBody)
     const cycle = res.data as GrowCycle
     if (startAt) {

@@ -63,15 +63,15 @@ src/
 
 ## Routes
 
-| Path                          | View               | Purpose                                                        |
-| ----------------------------- | ------------------ | -------------------------------------------------------------- |
-| `/`                           | HomeView           | Dashboard — live overview of active cycles & controller status |
-| `/admin`                      | AdminView          | CRUD tables for controllers and grow cycles                    |
-| `/admin/controllers/new`      | ControllerFormView | Register a new Raspberry Pi                                    |
-| `/admin/controllers/edit/:id` | ControllerFormView | Edit controller + manage attached devices                      |
-| `/admin/grows/new`            | GrowFormView       | Create a grow cycle with default phases                        |
-| `/admin/grows/edit/:id`       | GrowFormView       | Edit grow cycle phases and duration                            |
-| `/grow/:id`                   | GrowMonitorView    | Real-time monitor — device toggles, phase timeline, telemetry  |
+| Path                          | View               | Purpose                                                             |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------- |
+| `/`                           | HomeView           | Dashboard — live overview of active cycles & controller status      |
+| `/admin`                      | AdminView          | CRUD tables for controllers and grow cycles                         |
+| `/admin/controllers/new`      | ControllerFormView | Register a new Raspberry Pi                                         |
+| `/admin/controllers/edit/:id` | ControllerFormView | Edit controller + manage attached devices                           |
+| `/admin/grows/new`            | GrowFormView       | Create a grow cycle and provision devices (phases added separately) |
+| `/admin/grows/edit/:id`       | GrowFormView       | Edit grow cycle phases and duration                                 |
+| `/grow/:id`                   | GrowMonitorView    | Real-time monitor — device toggles, phase timeline, telemetry       |
 
 ## API
 

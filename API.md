@@ -120,15 +120,14 @@ Where `DeviceType` is one of:
 
 ### `GET /api/device/:id`
 
-Get a single device with its grow cycle and device configs.
+Get a single device with its grow cycle.
 
 **Response `200`** — Device plus:
 
 ```ts
 {
   // ...all Device fields above...
-  growCycle: GrowCycle;            // Full GrowCycle object
-  deviceConfigs: DeviceConfig[];   // All DeviceConfig objects for this device
+  growCycle: GrowCycle // Full GrowCycle object
 }
 ```
 
@@ -345,7 +344,7 @@ List all grow cycles (includes basic controller info).
 
 ### `GET /api/grow-cycles/:id`
 
-Get a grow cycle with full nested details (phases, device configs, devices).
+Get a grow cycle with full nested details (phases, devices).
 
 **Response `200`** — GrowCycle plus:
 
@@ -360,33 +359,20 @@ Get a grow cycle with full nested details (phases, device configs, devices).
     order: number
     durationDays: number
     isActive: boolean
-    startAt: string | null // ISO 8601
-    endAt: string | null // ISO 8601
+    startAt: string | null // "YYYY-MM-DD"
+    endAt: string | null // "YYYY-MM-DD"
     createdAt: string
     updatedAt: string
-    deviceConfigs: {
-      id: string
-      growPhaseId: string
-      deviceId: string
-      triggerType: TriggerType
-      configData: Record<string, unknown> // JSON payload
-      createdAt: string
-      updatedAt: string
-      device: Device // Full Device object
-    }
-    ;[]
-  }
-  ;[]
+  }[]
+  devices: Device[]
 }
 ```
-
-Where `TriggerType` is: `"SCHEDULE" | "THRESHOLD" | "ALWAYS_ON" | "ALWAYS_OFF"`
 
 **`404`** — `{ error: "Grow cycle record not found" }`
 
 ### `POST /api/grow-cycles`
 
-Create a new grow cycle. **Atomically** provisions: the grow cycle + the per-grow devices + 4 default phases + per-phase device configs.
+Create a new grow cycle. **Atomically** provisions: the grow cycle + the per-grow devices. **No phases are created automatically** — create phases explicitly via `POST /api/grow-phases`.
 
 **Request body:**
 
@@ -395,7 +381,7 @@ Create a new grow cycle. **Atomically** provisions: the grow cycle + the per-gro
   name: string;           // max 100 chars
   controllerId: string;   // UUID
   isActive?: boolean;     // default: false
-  devices: Array<{
+  devices: Array<{        // REQUIRED
     name: string;         // max 100 chars
     type: DeviceType;
     pinNumber: number;    // 0-40
@@ -407,18 +393,7 @@ Create a new grow cycle. **Atomically** provisions: the grow cycle + the per-gro
 }
 ```
 
-**Default phases created automatically:**
-
-| #   | Phase Name        | Duration | Light Config            | Exhaust Config           | Pump Config |
-| --- | ----------------- | -------- | ----------------------- | ------------------------ | ----------- |
-| 1   | Seedling / Clone  | 14d      | SCHEDULE, 18h on @06:00 | THRESHOLD, TEMP > 25°C   | —           |
-| 2   | Vegetative Stage  | 30d      | SCHEDULE, 22h on @06:00 | THRESHOLD, TEMP > 26.5°C | —           |
-| 3   | Flowering / Bloom | 60d      | SCHEDULE, 12h on @06:00 | THRESHOLD, TEMP > 26°C   | —           |
-| 4   | Curing / Harvest  | 7d       | ALWAYS_OFF              | —                        | ALWAYS_OFF  |
-
-A config is only created for a phase if the freshly-provisioned device set contains a device of the corresponding type (LIGHT, EXHAUST_FAN, WATER_PUMP).
-
-**Response `201`** — Full GrowCycle with nested `devices`, `phases`, and `phases[].deviceConfigs[].device` (same shape as `GET /:id`).
+**Response `201`** — Full GrowCycle with nested `controller`, `devices: Device[]`, and `phases: GrowPhase[]` (phases will be an empty array — create phases separately).
 **`400`** — `{ error: "Failed to create grow cycle record" }`
 **`409`** — `{ error: "Controller already has an active grow cycle. End the current grow before starting a new one." }` (only when `isActive: true` and the controller already has an active grow)
 
@@ -445,7 +420,7 @@ Update a grow cycle. `controllerId` is **not** accepted — a grow is bound to i
 
 ### `DELETE /api/grow-cycles/:id`
 
-Delete a grow cycle (cascades to phases, device configs, and telemetry).
+Delete a grow cycle (cascades to phases, devices, and telemetry).
 
 **Response `204`** — No body.
 **`404`** — `{ error: "Record could not be deleted" }`
@@ -456,7 +431,7 @@ Delete a grow cycle (cascades to phases, device configs, and telemetry).
 
 ### `GET /api/grow-phases/cycle/:growCycleId`
 
-List all phases for a grow cycle (includes device configs).
+List all phases for a grow cycle.
 
 **Response `200`** — Array of:
 
@@ -468,21 +443,10 @@ List all phases for a grow cycle (includes device configs).
   order: number
   durationDays: number
   isActive: boolean
-  startAt: string | null
-  endAt: string | null
+  startAt: string | null // "YYYY-MM-DD"
+  endAt: string | null // "YYYY-MM-DD"
   createdAt: string
   updatedAt: string
-  deviceConfigs: {
-    id: string
-    growPhaseId: string
-    deviceId: string
-    triggerType: TriggerType
-    configData: Record<string, unknown>
-    createdAt: string
-    updatedAt: string
-    device: Device // Full Device object
-  }
-  ;[]
 }
 ```
 
@@ -490,7 +454,7 @@ List all phases for a grow cycle (includes device configs).
 
 ### `GET /api/grow-phases/:id`
 
-Get a single phase with device configs.
+Get a single phase.
 
 **Response `200`** — Same shape as individual phase above.
 **`404`** — `{ error: "Grow phase record not found" }`
@@ -508,12 +472,12 @@ Create a custom phase.
   order: number;          // integer >= 1
   durationDays: number;   // integer >= 1
   isActive?: boolean;     // default: false
-  startAt?: string;       // ISO 8601
-  endAt?: string;         // ISO 8601
+  startAt?: string;       // "YYYY-MM-DD" (date only, no timestamp)
+  endAt?: string;         // "YYYY-MM-DD" (date only, no timestamp)
 }
 ```
 
-**Response `201`** — Full GrowPhase object (without deviceConfigs).
+**Response `201`** — Full GrowPhase object.
 **`400`** — `{ error: "Failed to create grow phase record" }`
 
 ### `PUT /api/grow-phases/:id`
@@ -542,21 +506,6 @@ Delete a phase.
 
 **Response `204`** — No body.
 **`404`** — `{ error: "Record could not be deleted" }`
-
----
-
-## Device Configs
-
-> **Note:** Device configs are managed indirectly through grow cycle creation (which auto-generates them) and do not have standalone REST endpoints. They are returned as nested resources under phases.
-
-### Trigger Types & ConfigData Shapes
-
-| TriggerType  | Example configData                           |
-| ------------ | -------------------------------------------- |
-| `SCHEDULE`   | `{ "onTime": "06:00", "durationHours": 18 }` |
-| `THRESHOLD`  | `{ "metric": "TEMP", "high": 26.5 }`         |
-| `ALWAYS_ON`  | `{}`                                         |
-| `ALWAYS_OFF` | `{}`                                         |
 
 ---
 
@@ -609,8 +558,6 @@ type DeviceType =
   | 'DEHUMIDIFIER'
   | 'CO2_INJECTOR'
 
-type TriggerType = 'SCHEDULE' | 'THRESHOLD' | 'ALWAYS_ON' | 'ALWAYS_OFF'
-
 type SensorType = 'HUMIDITY' | 'TEMPERATURE' | 'TEMP_HUMIDITY' | 'CO2' | 'PH' | 'EC'
 type SensorProtocol = 'I2C' | 'SPI' | 'UART' | 'RS485'
 
@@ -651,6 +598,8 @@ interface Device {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  // Nested on GET /api/device/:id:
+  //   growCycle: GrowCycle
 }
 
 interface GrowCycle {
@@ -672,16 +621,6 @@ interface GrowPhase {
   isActive: boolean
   startAt: string | null
   endAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-interface DeviceConfig {
-  id: string
-  growPhaseId: string
-  deviceId: string
-  triggerType: TriggerType
-  configData: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }

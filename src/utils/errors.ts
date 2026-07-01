@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { isAxiosError } from 'axios'
 
 export interface ApiError {
   status: number
@@ -6,7 +6,7 @@ export interface ApiError {
 }
 
 export function extractApiError(error: unknown, fallback = 'Request failed'): ApiError {
-  if (axios.isAxiosError(error)) {
+  if (isAxiosError(error)) {
     const status = error.response?.status ?? 0
     const data = error.response?.data as { error?: string } | undefined
     const message = data?.error ?? error.message ?? fallback

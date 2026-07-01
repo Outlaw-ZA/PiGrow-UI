@@ -1,20 +1,20 @@
 import { defineStore, storeToRefs } from 'pinia'
 import { useControllerStore } from './controllerStore'
-import { useDeviceConfigStore } from './deviceConfigStore'
 import { useDeviceStore } from './deviceStore'
 import { useGrowCycleStore } from './growCycleStore'
 import { useGrowPhaseStore } from './growPhaseStore'
 import { useSensorStore } from './sensorStore'
 import { useTelemetryStore } from './telemetryStore'
+import { useAutomationRuleStore } from './automationRuleStore'
 
 export const useApiStore = defineStore('api', () => {
   const controllerStore = useControllerStore()
   const deviceStore = useDeviceStore()
   const growCycleStore = useGrowCycleStore()
   const growPhaseStore = useGrowPhaseStore()
-  const deviceConfigStore = useDeviceConfigStore()
   const sensorStore = useSensorStore()
   const telemetryStore = useTelemetryStore()
+  const automationRuleStore = useAutomationRuleStore()
 
   const { controllers, loading } = storeToRefs(controllerStore)
   const { growCycles } = storeToRefs(growCycleStore)
@@ -35,36 +35,44 @@ export const useApiStore = defineStore('api', () => {
     controllers,
     createController: controllerStore.createController,
     createDevice: deviceStore.createDevice,
-    createDeviceConfig: deviceConfigStore.createDeviceConfig,
+    createDevicesBatch: deviceStore.createDevicesBatch,
     createGrowCycle: growCycleStore.createGrowCycle,
     createGrowPhase: growPhaseStore.createGrowPhase,
+    createRule: automationRuleStore.createRule,
     createSensor: sensorStore.createSensor,
     deleteController: controllerStore.deleteController,
     deleteDevice: deviceStore.deleteDevice,
-    deleteDeviceConfig: deviceConfigStore.deleteDeviceConfig,
     deleteGrowCycle: growCycleStore.deleteGrowCycle,
     deleteGrowPhase: growPhaseStore.deleteGrowPhase,
+    deletePhaseEnvironment: growPhaseStore.deletePhaseEnvironment,
+    deleteRule: automationRuleStore.deleteRule,
     deleteSensor: sensorStore.deleteSensor,
     endGrow: growCycleStore.endGrow,
     fetchAll,
     fetchController: controllerStore.fetchController,
-    fetchDeviceConfigs: deviceConfigStore.fetchDeviceConfigs,
     fetchDevices: deviceStore.fetchDevices,
     fetchGrowCycle: growCycleStore.fetchGrowCycle,
     fetchLatestTelemetry: telemetryStore.fetchLatestTelemetry,
+    fetchPhaseEnvironment: growPhaseStore.fetchPhaseEnvironment,
     fetchPhases: growPhaseStore.fetchPhases,
+    fetchRulesByCycle: automationRuleStore.fetchRulesByCycle,
+    fetchRulesByDevice: automationRuleStore.fetchRulesByDevice,
+    fetchRulesByPhase: automationRuleStore.fetchRulesByPhase,
     fetchSensor: sensorStore.fetchSensor,
     fetchSensors: sensorStore.fetchSensors,
     fetchTelemetry: telemetryStore.fetchTelemetry,
+    findDeviceOnController: deviceStore.findDeviceOnController,
     growCycles,
     loading,
     sendDeviceCommand: deviceStore.sendDeviceCommand,
     skipGrowPhase: growCycleStore.skipGrowPhase,
+    toggleRule: automationRuleStore.toggleRule,
     updateController: controllerStore.updateController,
     updateDevice: deviceStore.updateDevice,
-    updateDeviceConfig: deviceConfigStore.updateDeviceConfig,
     updateGrowCycle: growCycleStore.updateGrowCycle,
     updateGrowPhase: growPhaseStore.updateGrowPhase,
+    updateRule: automationRuleStore.updateRule,
     updateSensor: sensorStore.updateSensor,
+    upsertPhaseEnvironment: growPhaseStore.upsertPhaseEnvironment,
   }
 })

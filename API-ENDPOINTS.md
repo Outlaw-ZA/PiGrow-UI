@@ -63,10 +63,10 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 | Method   | Endpoint                          | FE Scenario                                                                                                                                          |
 | -------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/grow-cycles`                | HomeView cards, AdminView list (includes basic controller info)                                                                                      |
-| `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases, deviceConfigs, devices nested)                                                                      |
-| `POST`   | `/api/grow-cycles`                | GrowFormView create (bundles devices + atomically provisions grow, devices, 4 phases, per-phase device configs)                                      |
+| `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases, devices nested)                                                                                     |
+| `POST`   | `/api/grow-cycles`                | GrowFormView create (provisions grow + devices; phases are created separately via `/api/grow-phases`)                                                |
 | `PUT`    | `/api/grow-cycles/:id`            | GrowFormView edit (name, isActive, startAt as YYYY-MM-DD — `controllerId` is **not** accepted)                                                       |
-| `DELETE` | `/api/grow-cycles/:id`            | AdminView delete                                                                                                                                     |
+| `DELETE` | `/api/grow-cycles/:id`            | AdminView delete (cascades to phases, devices, and telemetry)                                                                                        |
 | `POST`   | `/api/grow-cycles/:id/skip-phase` | GrowMonitorView skip active phase (atomic: trims duration + cascades dates + activates next phase). Optional `?today=YYYY-MM-DD` query.              |
 | `POST`   | `/api/grow-cycles/:id/end-grow`   | GrowMonitorView end the grow cycle (atomic: trims active phase + marks cycle inactive + deactivates all phases). Optional `?today=YYYY-MM-DD` query. |
 
@@ -74,26 +74,14 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 
 ## Grow Phases
 
-| Method   | Endpoint                              | FE Scenario                                                                                         |
-| -------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `GET`    | `/api/grow-phases/cycle/:growCycleId` | GrowFormView phase list, GrowMonitorView timeline (includes deviceConfigs with full Device objects) |
-| `GET`    | `/api/grow-phases/:id`                | Phase detail (with deviceConfigs)                                                                   |
-| `POST`   | `/api/grow-phases`                    | GrowFormView add custom phase                                                                       |
-| `PUT`    | `/api/grow-phases/:id`                | GrowFormView edit phase (name, durationDays, order, startAt, endAt)                                 |
-| `DELETE` | `/api/grow-phases/:id`                | GrowFormView remove phase                                                                           |
-| `PATCH`  | `/api/grow-phases/:id/activate`       | GrowMonitorView phase transition (sets isActive, clears others)                                     |
-
----
-
-## Device Configs
-
-| Method   | Endpoint                             | FE Scenario                                  |
-| -------- | ------------------------------------ | -------------------------------------------- |
-| `GET`    | `/api/device-configs/phase/:phaseId` | Phase detail view (schedule/threshold rules) |
-| `GET`    | `/api/device-configs/:id`            | Single config detail                         |
-| `POST`   | `/api/device-configs`                | Add device config to a phase                 |
-| `PUT`    | `/api/device-configs/:id`            | Edit triggerType and configData              |
-| `DELETE` | `/api/device-configs/:id`            | Remove device config                         |
+| Method   | Endpoint                              | FE Scenario                                                         |
+| -------- | ------------------------------------- | ------------------------------------------------------------------- |
+| `GET`    | `/api/grow-phases/cycle/:growCycleId` | GrowFormView phase list, GrowMonitorView timeline                   |
+| `GET`    | `/api/grow-phases/:id`                | Phase detail                                                        |
+| `POST`   | `/api/grow-phases`                    | GrowFormView add custom phase                                       |
+| `PUT`    | `/api/grow-phases/:id`                | GrowFormView edit phase (name, durationDays, order, startAt, endAt) |
+| `DELETE` | `/api/grow-phases/:id`                | GrowFormView remove phase                                           |
+| `PATCH`  | `/api/grow-phases/:id/activate`       | GrowMonitorView phase transition (sets isActive, clears others)     |
 
 ---
 
@@ -128,7 +116,7 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 
 ### Grow Cycle Creation
 
-`POST /api/grow-cycles` accepts `{ name, controllerId, isActive?, devices: [...] }` and **atomically** provisions: grow cycle + per-grow devices + 4 default phases + per-phase device configs. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
+`POST /api/grow-cycles` accepts `{ name, controllerId, isActive?, devices: [...] }` and **atomically** provisions: grow cycle + per-grow devices. **No phases are created automatically** — create phases explicitly via `POST /api/grow-phases`. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
 
 Each device in the `devices` array: `{ name, type, pinNumber (0–40), mqttTopic, isActive? (default true) }`.
 
@@ -140,14 +128,7 @@ If `isActive: true` is sent but the controller already has an active grow, the r
 }
 ```
 
-| #   | Phase Name        | Duration | Light Config            | Exhaust Config           | Pump Config |
-| --- | ----------------- | -------- | ----------------------- | ------------------------ | ----------- |
-| 1   | Seedling / Clone  | 14d      | SCHEDULE, 18h on @06:00 | THRESHOLD, TEMP > 25°C   | —           |
-| 2   | Vegetative Stage  | 30d      | SCHEDULE, 22h on @06:00 | THRESHOLD, TEMP > 26.5°C | —           |
-| 3   | Flowering / Bloom | 60d      | SCHEDULE, 12h on @06:00 | THRESHOLD, TEMP > 26°C   | —           |
-| 4   | Curing / Harvest  | 7d       | ALWAYS_OFF              | —                        | ALWAYS_OFF  |
-
-Configs are only created for a phase if the freshly-provisioned device set contains a device of the corresponding type (LIGHT, EXHAUST_FAN, WATER_PUMP).
+> **Note:** DeviceConfig, TriggerType, and per-phase device-configuration rules are no longer part of the API. Devices are managed at the grow-cycle level only. A replacement device-to-phase rules solution is pending.
 
 ### Grow Cycle Update
 
@@ -161,5 +142,5 @@ All errors return `{ error: string }` with appropriate HTTP status (400 for vali
 
 - **List endpoints** (`GET /api/grow-cycles`, `/api/controllers`) — flat with only `controller: { name, status }` included
 - **Detail endpoints**:
-  - `GET /api/grow-cycles/:id` — full nested: `controller`, `devices[]`, `phases[].deviceConfigs[].device`
+  - `GET /api/grow-cycles/:id` — full nested: `controller`, `devices[]`, `phases[]` (phases carry no device-config children)
   - `GET /api/controllers/:id` — `growCycles` (only active cycles) with each cycle's `phases` (only active phase) + `devices[]` nested. No top-level `devices` on the controller.
