@@ -7,6 +7,7 @@ import {
   SensorType,
 } from '../types/grow'
 import type { AutomationRule, Device, PhaseEnvironment } from '../types/grow'
+import { formatIntervalRule } from '../utils/automationRuleDisplay'
 import {
   THRESHOLD_RELEVANT_SENSOR_TYPES,
   conditionToBoundarySide,
@@ -58,6 +59,7 @@ export interface AutomationMonitor {
   loading: boolean
   groups: AutomationGroup[]
   pinnedRules: RuleDisplayInfo[]
+  intervalRules: RuleDisplayInfo[]
   hasRules: boolean
   toggleRule: (id: string) => Promise<void>
   reload: () => Promise<void>
@@ -129,6 +131,9 @@ function conditionPhrase(rule: AutomationRule): string {
     }
     case RuleCondition.ALWAYS_OFF: {
       return 'Always OFF'
+    }
+    case RuleCondition.INTERVAL: {
+      return formatIntervalRule(rule)
     }
     default: {
       return String(rule.condition)
@@ -358,6 +363,10 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
     displayRules.value.filter((r) => r.isPinned || r.isLegacy),
   )
 
+  const intervalRules = computed<RuleDisplayInfo[]>(() =>
+    displayRules.value.filter((r) => r.rule.condition === RuleCondition.INTERVAL),
+  )
+
   const hasRules = computed(() => rules.value.length > 0)
 
   watch(
@@ -372,6 +381,7 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
   return reactive({
     groups,
     hasRules,
+    intervalRules,
     loading,
     pinnedRules,
     reload,

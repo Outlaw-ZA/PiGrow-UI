@@ -22,9 +22,17 @@ import { useGrowPhaseStore } from '../stores/growPhaseStore'
 import type { PhaseEnvironmentResponse } from '../stores/growPhaseStore'
 import { extractApiError } from '../utils/errors'
 import { formatSensorType, isRuleBoundarySet } from '../utils/sensors'
+import { formatIntervalRule } from '../utils/automationRuleDisplay'
 import PhaseRuleForm from './PhaseRuleForm.vue'
 
-type FieldKey = 'deviceId' | 'watchedSensorType' | 'condition' | 'action' | 'period'
+type FieldKey =
+  | 'deviceId'
+  | 'watchedSensorType'
+  | 'condition'
+  | 'action'
+  | 'period'
+  | 'intervalOnSeconds'
+  | 'intervalCycleSeconds'
 
 interface FieldError {
   field: FieldKey
@@ -154,6 +162,20 @@ function matchServerError(message: string): FieldError | null {
   }
   if (message.includes('watchedSensorType is required for threshold conditions')) {
     return { field: 'watchedSensorType', message }
+  }
+  if (message.includes('action must be ON for condition INTERVAL')) {
+    return { field: 'action', message }
+  }
+  if (message.includes('watchedSensorType must be null for INTERVAL rules')) {
+    return { field: 'watchedSensorType', message }
+  }
+  if (
+    message.includes('intervalOnSeconds is required') ||
+    message.includes('intervalCycleSeconds is required') ||
+    message.includes('intervalCycleSeconds must be greater than') ||
+    message.includes('intervalOnSeconds and intervalCycleSeconds must be null for non-INTERVAL')
+  ) {
+    return { field: 'condition', message }
   }
   return null
 }
@@ -357,6 +379,12 @@ function close() {
                   severity="secondary"
                   rounded
                 />
+                <Tag
+                  v-else-if="slot.data.condition === 'INTERVAL'"
+                  :value="formatIntervalRule(slot.data)"
+                  severity="info"
+                  rounded
+                />
                 <span v-else>{{ slot.data.condition }}</span>
                 <Tag
                   v-if="ruleBoundaryWarning(slot.data)"
@@ -451,6 +479,13 @@ function close() {
               outlined
               :disabled="saving"
               @click="showAddForm(RuleCondition.ALWAYS_OFF)"
+            />
+            <Button
+              label="⏱ Interval"
+              severity="info"
+              outlined
+              :disabled="saving"
+              @click="showAddForm(RuleCondition.INTERVAL)"
             />
             <Button
               label="Add rule"

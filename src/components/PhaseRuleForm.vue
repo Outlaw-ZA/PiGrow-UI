@@ -12,6 +12,11 @@ import type {
   UpdateAutomationRulePayload,
 } from '../types/grow'
 import { SENSOR_TYPE_OPTIONS, THRESHOLD_RELEVANT_SENSOR_TYPES } from '../utils/sensors'
+import {
+  buildCreatePayload,
+  buildUpdatePayload,
+  validateRuleDraft,
+} from '../utils/automationRuleValidation'
 
 const props = defineProps<{
   mode: 'create' | 'edit'
@@ -31,7 +36,14 @@ const emit = defineEmits<{
   ]
 }>()
 
-type FieldKey = 'deviceId' | 'watchedSensorType' | 'condition' | 'action' | 'period'
+type FieldKey =
+  | 'deviceId'
+  | 'watchedSensorType'
+  | 'condition'
+  | 'action'
+  | 'period'
+  | 'intervalOnSeconds'
+  | 'intervalCycleSeconds'
 // FieldKey is also referenced (by string-literal contract) in
 // PhaseAutomationRulesDialog.vue. Keep the union values in sync there.
 
@@ -42,6 +54,8 @@ interface Draft {
   period: DayNightPeriod | null
   action: DeviceAction
   cooldownSeconds: number
+  intervalOnSeconds: number | null
+  intervalCycleSeconds: number | null
 }
 
 const BOTH = 'BOTH' as const
@@ -104,6 +118,16 @@ const conditionGroups = [
     ],
     label: 'Pin',
   },
+  {
+    items: [
+      {
+        description: 'Pulse ON then OFF on a repeating cycle',
+        label: 'Interval (duty cycle)',
+        value: RuleCondition.INTERVAL,
+      },
+    ],
+    label: 'Duty cycle',
+  },
 ]
 
 const THRESHOLD_CONDITIONS = new Set<RuleCondition>([
@@ -131,6 +155,8 @@ const isAlways = computed(
     draft.value.condition === RuleCondition.ALWAYS_ON ||
     draft.value.condition === RuleCondition.ALWAYS_OFF,
 )
+
+const isInterval = computed(() => draft.value.condition === RuleCondition.INTERVAL)
 
 const isThreshold = computed(() => THRESHOLD_CONDITIONS.has(draft.value.condition))
 
@@ -163,12 +189,24 @@ const targetFieldHint = computed(() => {
   return `Ensure the relevant Target field (e.g. ${targetKey}) is set on this phase's DAY/NIGHT environment, or this rule will never fire.`
 })
 
+const intervalPreview = computed(() => {
+  const on = draft.value.intervalOnSeconds
+  const cyc = draft.value.intervalCycleSeconds
+  if (on == null || cyc == null) {
+    return null
+  }
+  const off = cyc - on
+  return `ON ${on}s, then OFF ${off}s, repeating every ${cyc}s`
+})
+
 function emptyDraft(): Draft {
   return {
     action: DeviceAction.ON,
     condition: props.initialCondition ?? RuleCondition.ABOVE_MAX,
     cooldownSeconds: 180,
     deviceId: props.devices.find((d) => d.isActive && d.type !== DeviceType.LIGHT)?.id ?? null,
+    intervalCycleSeconds: props.initialCondition === RuleCondition.INTERVAL ? 300 : null,
+    intervalOnSeconds: props.initialCondition === RuleCondition.INTERVAL ? 30 : null,
     period: null,
     watchedSensorType: SensorType.TEMPERATURE,
   }
@@ -183,6 +221,8 @@ function hydrate() {
       condition: props.initialRule.condition,
       cooldownSeconds: props.initialRule.cooldownSeconds,
       deviceId: props.initialRule.deviceId,
+      intervalCycleSeconds: props.initialRule.intervalCycleSeconds,
+      intervalOnSeconds: props.initialRule.intervalOnSeconds,
       period: props.initialRule.period,
       watchedSensorType: props.initialRule.watchedSensorType,
     }
@@ -200,13 +240,34 @@ watch(
 watch(
   () => draft.value.condition,
   (next, prev) => {
-    if (next === RuleCondition.ALWAYS_ON) {
+    // INTERVAL cleanup — runs as a separate block so the new-condition
+    // Branches also apply when transitioning away from INTERVAL.
+    if (prev === RuleCondition.INTERVAL) {
+      draft.value.intervalOnSeconds = null
+      draft.value.intervalCycleSeconds = null
+    }
+
+    if (next === RuleCondition.INTERVAL) {
+      draft.value.action = DeviceAction.ON
+      draft.value.watchedSensorType = null
+      if (draft.value.intervalOnSeconds == null) {
+        draft.value.intervalOnSeconds = 30
+      }
+      if (draft.value.intervalCycleSeconds == null) {
+        draft.value.intervalCycleSeconds = 300
+      }
+    } else if (next === RuleCondition.ALWAYS_ON) {
       draft.value.action = DeviceAction.ON
       draft.value.watchedSensorType = null
     } else if (next === RuleCondition.ALWAYS_OFF) {
       draft.value.action = DeviceAction.OFF
       draft.value.watchedSensorType = null
-    } else if (prev === RuleCondition.ALWAYS_ON || prev === RuleCondition.ALWAYS_OFF) {
+    } else if (
+      prev === RuleCondition.ALWAYS_ON ||
+      prev === RuleCondition.ALWAYS_OFF ||
+      prev === RuleCondition.INTERVAL
+    ) {
+      // Leaving a pin or INTERVAL for a threshold — reset sensor.
       draft.value.watchedSensorType = SensorType.TEMPERATURE
     }
   },
@@ -220,7 +281,10 @@ const periodChoice = computed<PeriodChoice>({
 })
 
 const actionOptionsForCondition = computed(() => {
-  if (draft.value.condition === RuleCondition.ALWAYS_ON) {
+  if (
+    draft.value.condition === RuleCondition.ALWAYS_ON ||
+    draft.value.condition === RuleCondition.INTERVAL
+  ) {
     return actionOptions.filter((o) => o.value === DeviceAction.ON)
   }
   if (draft.value.condition === RuleCondition.ALWAYS_OFF) {
@@ -229,30 +293,7 @@ const actionOptionsForCondition = computed(() => {
   return actionOptions
 })
 
-const validationError = computed<string | null>(() => {
-  if (!draft.value.deviceId) {
-    return 'Select a device.'
-  }
-  if (isThreshold.value && draft.value.watchedSensorType == null) {
-    return 'watchedSensorType is required for threshold conditions (ABOVE_MAX, BELOW_MIN, ABOVE_MIN, BELOW_MAX, ABOVE_TARGET, BELOW_TARGET)'
-  }
-  if (isAlways.value && draft.value.watchedSensorType != null) {
-    return 'watchedSensorType must be null for ALWAYS_ON / ALWAYS_OFF rules'
-  }
-  if (draft.value.condition === RuleCondition.ALWAYS_ON && draft.value.action !== DeviceAction.ON) {
-    return 'action must be ON for condition ALWAYS_ON'
-  }
-  if (
-    draft.value.condition === RuleCondition.ALWAYS_OFF &&
-    draft.value.action !== DeviceAction.OFF
-  ) {
-    return 'action must be OFF for condition ALWAYS_OFF'
-  }
-  if (draft.value.cooldownSeconds < 0) {
-    return 'Cooldown cannot be negative.'
-  }
-  return null
-})
+const validationError = computed<string | null>(() => validateRuleDraft(draft.value, props.devices))
 
 const isValid = computed(() => validationError.value === null)
 
@@ -268,26 +309,10 @@ function onSubmit() {
     return
   }
   if (props.mode === 'create') {
-    const payload: CreateAutomationRulePayload = {
-      action: draft.value.action,
-      condition: draft.value.condition,
-      cooldownSeconds: draft.value.cooldownSeconds,
-      deviceId: draft.value.deviceId,
-      enabled: true,
-      growPhaseId: props.growPhaseId,
-      period: draft.value.period,
-      watchedSensorType: draft.value.watchedSensorType,
-    }
+    const payload = buildCreatePayload(draft.value, props.growPhaseId)
     emit('submit', { kind: 'create', payload })
   } else if (props.initialRule) {
-    const payload: UpdateAutomationRulePayload = {
-      action: draft.value.action,
-      condition: draft.value.condition,
-      cooldownSeconds: draft.value.cooldownSeconds,
-      deviceId: draft.value.deviceId,
-      period: draft.value.period,
-      watchedSensorType: draft.value.watchedSensorType,
-    }
+    const payload = buildUpdatePayload(draft.value)
     emit('submit', { id: props.initialRule.id, kind: 'update', payload })
   }
 }
@@ -312,7 +337,27 @@ function onSubmit() {
         </p>
       </div>
 
-      <div class="field" v-if="isThreshold">
+      <div v-if="isInterval" class="field">
+        <label class="field-label">Interval ON (seconds)</label>
+        <InputNumber
+          v-model.number="draft.intervalOnSeconds"
+          :min="1"
+          data-testid="interval-on"
+          show-buttons
+          class="full-width"
+        />
+        <label class="field-label">Interval cycle (seconds)</label>
+        <InputNumber
+          v-model.number="draft.intervalCycleSeconds"
+          :min="2"
+          data-testid="interval-cycle"
+          show-buttons
+          class="full-width"
+        />
+        <p v-if="intervalPreview" class="field-hint">{{ intervalPreview }}</p>
+      </div>
+
+      <div class="field" v-else-if="isThreshold">
         <label class="field-label">Watched sensor</label>
         <Select
           v-model="draft.watchedSensorType"
@@ -321,6 +366,7 @@ function onSubmit() {
           option-value="value"
           placeholder="Select sensor"
           class="full-width"
+          data-testid="sensor-picker"
           :invalid="!!inlineErrorFor('watchedSensorType')"
         />
         <p v-if="inlineErrorFor('watchedSensorType')" class="field-error">
@@ -370,11 +416,11 @@ function onSubmit() {
           :options="actionOptionsForCondition"
           option-label="label"
           option-value="value"
-          :disabled="isAlways"
+          :disabled="isAlways || isInterval"
           class="full-width"
           :invalid="!!inlineErrorFor('action')"
         />
-        <p v-if="isAlways" class="field-hint">
+        <p v-if="isAlways || isInterval" class="field-hint">
           Locked to {{ draft.action }} for condition {{ draft.condition }}.
         </p>
         <p v-else-if="inlineErrorFor('action')" class="field-error">

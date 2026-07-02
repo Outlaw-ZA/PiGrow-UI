@@ -948,6 +948,45 @@ function statusSeverity(status?: string) {
               </div>
             </div>
           </div>
+
+          <div v-if="automations.intervalRules.length" class="auto-group">
+            <div class="auto-group-header">
+              <span class="auto-group-label">Interval</span>
+            </div>
+            <div class="auto-rules">
+              <div
+                v-for="info in automations.intervalRules"
+                :key="info.rule.id"
+                class="auto-rule auto-rule--pinned"
+                :class="{
+                  'auto-rule--disabled': !info.rule.enabled,
+                }"
+              >
+                <div class="auto-rule-head">
+                  <div class="auto-rule-device">
+                    <i :class="info.deviceIcon" class="auto-rule-icon"></i>
+                    <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
+                  </div>
+                  <InputSwitch
+                    :modelValue="info.rule.enabled"
+                    :disabled="automations.loading"
+                    @update:modelValue="onRuleToggle(info.rule.id)"
+                  />
+                </div>
+                <div class="auto-rule-condition">
+                  {{ info.conditionText }}
+                  <span class="auto-rule-action"> → {{ actionLabel(info.rule.action) }} </span>
+                </div>
+                <div class="auto-rule-meta">
+                  <span class="auto-rule-period">{{ info.periodLabel }}</span>
+                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
+                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
+                  </span>
+                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
     </Card>
