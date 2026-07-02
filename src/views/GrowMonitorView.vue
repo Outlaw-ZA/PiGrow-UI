@@ -384,7 +384,9 @@ const automations = useAutomationMonitor({
   getActivePeriod: () => activePeriod.value as DayNightPeriod,
   getActivePhaseId: () => {
     const idx = activePhaseIndex.value
-    if (idx < 0) return undefined
+    if (idx < 0) {
+      return
+    }
     return sortedPhases.value[idx]?.id ?? undefined
   },
   getDevices: () => growDevices.value,
