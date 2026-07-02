@@ -7,7 +7,7 @@ import {
   SensorType,
 } from '../types/grow'
 import type { AutomationRule, Device, PhaseEnvironment } from '../types/grow'
-import { formatIntervalRule } from '../utils/automationRuleDisplay'
+import { conditionShort, formatIntervalRule } from '../utils/automationRuleDisplay'
 import {
   THRESHOLD_RELEVANT_SENSOR_TYPES,
   conditionToBoundarySide,
@@ -27,6 +27,7 @@ export interface RuleDisplayInfo {
   device: Device | undefined
   deviceIcon: string
   conditionText: string
+  conditionShort: string
   thresholdValue: number | null
   currentValue: number | null
   unit: string
@@ -272,7 +273,12 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
       const updated = await input.toggleRuleApi(id)
       const cur = rules.value.findIndex((r) => r.id === id)
       if (cur !== -1) {
-        rules.value = [...rules.value.slice(0, cur), updated, ...rules.value.slice(cur + 1)]
+        const current = rules.value[cur] as AutomationRule
+        rules.value = [
+          ...rules.value.slice(0, cur),
+          { ...current, enabled: updated.enabled ?? current.enabled },
+          ...rules.value.slice(cur + 1),
+        ]
       }
     } catch {
       const cur = rules.value.findIndex((r) => r.id === id)
@@ -316,6 +322,7 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
         : ''
     const conditionText = conditionPhrase(rule)
     return {
+      conditionShort: conditionShort(rule),
       conditionText,
       currentValue: current,
       device,

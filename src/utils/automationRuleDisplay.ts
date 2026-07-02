@@ -1,3 +1,4 @@
+import { RuleCondition, SensorType } from '../types/grow'
 import type { AutomationRule } from '../types/grow'
 
 /**
@@ -30,4 +31,50 @@ export function formatIntervalRule(rule: AutomationRule): string {
     return 'Interval'
   }
   return `ON ${fmtDuration(on)} every ${fmtDuration(cyc)} (OFF ${fmtDuration(cyc - on)})`
+}
+
+function isTempSensor(st: SensorType | null | undefined): boolean {
+  return st === SensorType.TEMPERATURE || st === SensorType.TEMP_HUMIDITY
+}
+
+/**
+ * Terse condition phrase for compact rule display (e.g. "temp > max").
+ * Mirrors {@link formatIntervalRule} for INTERVAL. Falls back to
+ * `String(rule.condition)` for unknown conditions.
+ */
+export function conditionShort(rule: AutomationRule): string {
+  const watched = rule.watchedSensorType
+  const isTemp = isTempSensor(watched)
+  switch (rule.condition) {
+    case RuleCondition.ABOVE_MAX: {
+      return isTemp ? 'temp > max' : 'reading > max'
+    }
+    case RuleCondition.BELOW_MIN: {
+      return isTemp ? 'temp < min' : 'reading < min'
+    }
+    case RuleCondition.BELOW_MAX: {
+      return 'reading < max (recovery)'
+    }
+    case RuleCondition.ABOVE_MIN: {
+      return 'reading > min (recovery)'
+    }
+    case RuleCondition.ABOVE_TARGET: {
+      return 'reading > target'
+    }
+    case RuleCondition.BELOW_TARGET: {
+      return 'reading < target'
+    }
+    case RuleCondition.ALWAYS_ON: {
+      return 'Always ON'
+    }
+    case RuleCondition.ALWAYS_OFF: {
+      return 'Always OFF'
+    }
+    case RuleCondition.INTERVAL: {
+      return formatIntervalRule(rule)
+    }
+    default: {
+      return String(rule.condition)
+    }
+  }
 }

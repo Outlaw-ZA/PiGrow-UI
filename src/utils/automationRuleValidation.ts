@@ -91,8 +91,8 @@ export function buildCreatePayload(d: RuleDraft, growPhaseId: string): CreateAut
   if (d.condition === RuleCondition.INTERVAL) {
     return {
       ...base,
-      intervalOnSeconds: d.intervalOnSeconds!,
       intervalCycleSeconds: d.intervalCycleSeconds!,
+      intervalOnSeconds: d.intervalOnSeconds!,
     }
   }
   return base
@@ -110,8 +110,8 @@ export function buildUpdatePayload(d: RuleDraft): UpdateAutomationRulePayload {
   if (d.condition === RuleCondition.INTERVAL) {
     return {
       ...base,
-      intervalOnSeconds: d.intervalOnSeconds!,
       intervalCycleSeconds: d.intervalCycleSeconds!,
+      intervalOnSeconds: d.intervalOnSeconds!,
     }
   }
   return { ...base, intervalCycleSeconds: null, intervalOnSeconds: null }

@@ -1,18 +1,117 @@
 import { describe, expect, it } from 'vitest'
-import { formatIntervalRule } from './automationRuleDisplay'
+import { conditionShort, formatIntervalRule } from './automationRuleDisplay'
+import { DeviceAction, RuleCondition, SensorType } from '../types/grow'
 import type { AutomationRule } from '../types/grow'
 
-const r = (on: number | null, cyc: number | null) =>
-  ({ intervalCycleSeconds: cyc, intervalOnSeconds: on }) as AutomationRule
+const intervalRule = (on: number | null, cyc: number | null) =>
+  ({
+    condition: RuleCondition.INTERVAL,
+    intervalCycleSeconds: cyc,
+    intervalOnSeconds: on,
+  }) as AutomationRule
+
+const thresholdRule = (condition: RuleCondition, watchedSensorType: SensorType) =>
+  ({ condition, watchedSensorType }) as AutomationRule
 
 describe('formatIntervalRule', () => {
   it('formats 30/300', () => {
-    expect(formatIntervalRule(r(30, 300))).toBe('ON 30s every 5m (OFF 4m 30s)')
+    expect(formatIntervalRule(intervalRule(30, 300))).toBe('ON 30s every 5m (OFF 4m 30s)')
   })
   it('formats 60/3600', () => {
-    expect(formatIntervalRule(r(60, 3600))).toBe('ON 1m every 1h (OFF 59m)')
+    expect(formatIntervalRule(intervalRule(60, 3600))).toBe('ON 1m every 1h (OFF 59m)')
   })
   it('handles nulls', () => {
-    expect(formatIntervalRule(r(null, null))).toBe('Interval')
+    expect(formatIntervalRule(intervalRule(null, null))).toBe('Interval')
   })
 })
+
+describe('conditionShort', () => {
+  it('renders ABOVE_MAX on temperature as "temp > max"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_MAX, SensorType.TEMPERATURE))).toBe(
+      'temp > max',
+    )
+  })
+
+  it('renders ABOVE_MAX on TEMP_HUMIDITY as "temp > max"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_MAX, SensorType.TEMP_HUMIDITY))).toBe(
+      'temp > max',
+    )
+  })
+
+  it('renders ABOVE_MAX on humidity as "reading > max"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_MAX, SensorType.HUMIDITY))).toBe(
+      'reading > max',
+    )
+  })
+
+  it('renders ABOVE_MAX on CO2 as "reading > max"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_MAX, SensorType.CO2))).toBe(
+      'reading > max',
+    )
+  })
+
+  it('renders BELOW_MIN on temperature as "temp < min"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.BELOW_MIN, SensorType.TEMPERATURE))).toBe(
+      'temp < min',
+    )
+  })
+
+  it('renders BELOW_MIN on CO2 as "reading < min"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.BELOW_MIN, SensorType.CO2))).toBe(
+      'reading < min',
+    )
+  })
+
+  it('renders ABOVE_TARGET as "reading > target"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_TARGET, SensorType.HUMIDITY))).toBe(
+      'reading > target',
+    )
+  })
+
+  it('renders BELOW_TARGET as "reading < target"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.BELOW_TARGET, SensorType.HUMIDITY))).toBe(
+      'reading < target',
+    )
+  })
+
+  it('renders BELOW_MAX (recovery) as "reading < max (recovery)"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.BELOW_MAX, SensorType.HUMIDITY))).toBe(
+      'reading < max (recovery)',
+    )
+  })
+
+  it('renders ABOVE_MIN (recovery) as "reading > min (recovery)"', () => {
+    expect(conditionShort(thresholdRule(RuleCondition.ABOVE_MIN, SensorType.HUMIDITY))).toBe(
+      'reading > min (recovery)',
+    )
+  })
+
+  it('renders ALWAYS_ON as "Always ON"', () => {
+    expect(conditionShort({ condition: RuleCondition.ALWAYS_ON } as AutomationRule)).toBe(
+      'Always ON',
+    )
+  })
+
+  it('renders ALWAYS_OFF as "Always OFF"', () => {
+    expect(conditionShort({ condition: RuleCondition.ALWAYS_OFF } as AutomationRule)).toBe(
+      'Always OFF',
+    )
+  })
+
+  it('renders INTERVAL via formatIntervalRule (valid fields)', () => {
+    expect(conditionShort(intervalRule(30, 300))).toBe('ON 30s every 5m (OFF 4m 30s)')
+  })
+
+  it('renders INTERVAL as "Interval" when fields are null', () => {
+    expect(conditionShort(intervalRule(null, null))).toBe('Interval')
+  })
+
+  it('falls back to String(condition) for unknown conditions', () => {
+    expect(conditionShort({ condition: 'SCHEDULE_ON' as RuleCondition } as AutomationRule)).toBe(
+      'SCHEDULE_ON',
+    )
+  })
+})
+
+// Ensure DeviceAction import is retained for future tests even if unused above.
+void DeviceAction

@@ -17,6 +17,7 @@ import { useToast } from 'primevue/usetoast'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+import InputSwitch from 'primevue/inputswitch'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Menu from 'primevue/menu'
 import ConfirmDialog from 'primevue/confirmdialog'
@@ -734,6 +735,89 @@ function statusSeverity(status?: string) {
     </Card>
 
     <Card>
+      <template #title>Devices</template>
+      <template #content>
+        <div v-if="growDevices.length" class="device-grid">
+          <div
+            v-for="device in growDevices"
+            :key="device.id"
+            class="device-tile"
+            :class="{ active: deviceToggles[device.id!] }"
+          >
+            <span class="device-name">{{ device.name }}</span>
+            <ToggleSwitch
+              :modelValue="deviceToggles[device.id!]"
+              @update:modelValue="(val: boolean) => onToggle(device.id!, val)"
+            />
+          </div>
+        </div>
+        <div v-else class="empty-state">No devices configured for this grow cycle.</div>
+      </template>
+    </Card>
+
+    <Card>
+      <template #title>
+        <div class="phase-card-title">
+          <span>Phases</span>
+          <Button
+            v-if="activePhaseIndex >= 0"
+            icon="pi pi-ellipsis-v"
+            text
+            rounded
+            severity="secondary"
+            size="small"
+            aria-label="Phase options"
+            :disabled="skipping || ending"
+            @click="togglePhaseMenu"
+          />
+          <Menu ref="phaseMenu" :model="phaseMenuItems" popup />
+        </div>
+      </template>
+      <template #content>
+        <div v-if="sortedPhases.length" class="phases-wrapper">
+          <div class="phase-track">
+            <div class="phase-line">
+              <div class="phase-line-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
+            </div>
+            <div v-for="(phase, idx) in sortedPhases" :key="phase.id || idx" class="phase-step">
+              <div
+                class="phase-dot"
+                :class="{
+                  done: idx < activePhaseIndex,
+                  active: idx === activePhaseIndex,
+                  pending: idx > activePhaseIndex,
+                }"
+              >
+                {{ idx + 1 }}
+              </div>
+              <div class="phase-name" :class="{ active: idx === activePhaseIndex }">
+                {{ phase.name }}
+              </div>
+              <div class="phase-duration">
+                {{ phase.durationDays }} day{{ phase.durationDays !== 1 ? 's' : '' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="progress-block">
+            <div class="progress-header">
+              <span class="progress-label">Overall Progress</span>
+              <span class="progress-value">{{ cycleProgressPercent }}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
+            </div>
+            <div class="progress-footer">
+              <span>{{ elapsedDays }} days</span>
+              <span>{{ totalDurationDays }} days</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">No phases configured for this grow cycle.</div>
+      </template>
+    </Card>
+
+    <Card>
       <template #title>
         <div class="env-card-title">
           <span>Environment — {{ activePhaseName }}</span>
@@ -848,10 +932,35 @@ function statusSeverity(status?: string) {
                 class="auto-rule"
                 :class="{ 'auto-rule--disabled': !info.rule.enabled }"
               >
-                <div class="auto-rule-head">
+                <div class="auto-rule-row1">
                   <div class="auto-rule-device">
                     <i :class="info.deviceIcon" class="auto-rule-icon"></i>
                     <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
+                  </div>
+                  <div class="auto-rule-status">
+                    <Tag
+                      v-if="!info.rule.enabled"
+                      value="OFF"
+                      severity="secondary"
+                      rounded
+                      class="auto-rule-off-tag"
+                    />
+                    <span class="auto-rule-current" :class="`auto-rule-current--${info.proximity}`">
+                      {{ info.currentValue ?? '—' }}{{ info.unit }}
+                    </span>
+                    <Tag
+                      v-if="info.thresholdValue != null"
+                      :value="proximityLabel(info.proximity)"
+                      :severity="proximitySeverity(info.proximity)"
+                      rounded
+                    />
+                    <i
+                      v-else
+                      class="pi pi-exclamation-triangle auto-rule-warn-icon"
+                      v-tooltip.top="
+                        'Threshold not set on active period environment — this rule will never fire.'
+                      "
+                    ></i>
                   </div>
                   <InputSwitch
                     :modelValue="info.rule.enabled"
@@ -859,44 +968,32 @@ function statusSeverity(status?: string) {
                     @update:modelValue="onRuleToggle(info.rule.id)"
                   />
                 </div>
-                <div class="auto-rule-condition">
-                  {{ info.conditionText }}
-                  <span class="auto-rule-action"> → {{ actionLabel(info.rule.action) }} </span>
-                </div>
-                <div v-if="info.thresholdValue != null" class="auto-rule-bar-wrap">
-                  <div class="auto-rule-bar">
-                    <div
-                      class="auto-rule-bar-fill"
-                      :class="`auto-rule-bar-fill--${info.proximity}`"
-                      :style="barFillStyle(info)"
-                    ></div>
-                    <div class="auto-rule-bar-threshold" :style="{ left: '66.66%' }"></div>
+                <div class="auto-rule-row2">
+                  <span class="auto-rule-cond"
+                    >{{ info.conditionShort }} → {{ actionLabel(info.rule.action) }}</span
+                  >
+                  <div v-if="info.thresholdValue != null" class="auto-rule-mini">
+                    <div class="auto-rule-mini-bar">
+                      <div
+                        class="auto-rule-mini-fill"
+                        :class="`auto-rule-mini-fill--${info.proximity}`"
+                        :style="barFillStyle(info)"
+                      ></div>
+                      <div class="auto-rule-mini-tick" :style="{ left: '66.66%' }"></div>
+                    </div>
+                    <span class="auto-rule-mini-text"
+                      >{{ info.thresholdValue }}{{ info.unit }}</span
+                    >
                   </div>
-                  <div class="auto-rule-bar-labels">
-                    <span class="auto-rule-current" :class="`auto-rule-current--${info.proximity}`">
-                      {{ info.currentValue ?? '—' }}{{ info.unit }}
-                    </span>
-                    <span class="auto-rule-threshold-label">
-                      {{ info.thresholdValue }}{{ info.unit }} threshold
-                      <Tag
-                        :value="proximityLabel(info.proximity)"
-                        :severity="proximitySeverity(info.proximity)"
-                        rounded
-                        class="auto-rule-proximity-tag"
-                      />
-                    </span>
-                  </div>
-                </div>
-                <div v-else class="auto-rule-warning">
-                  <i class="pi pi-exclamation-triangle"></i>
-                  Threshold not set on the active period environment — this rule will never fire.
-                </div>
-                <div class="auto-rule-meta">
                   <span class="auto-rule-period">{{ info.periodLabel }}</span>
-                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
-                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
-                  </span>
-                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                  <i
+                    class="pi pi-info-circle auto-rule-info"
+                    v-tooltip.top="
+                      info.rule.lastTriggeredAt
+                        ? `Last triggered: ${formatLastTriggered(info.rule.lastTriggeredAt)}`
+                        : 'Never triggered'
+                    "
+                  ></i>
                 </div>
               </div>
             </div>
@@ -916,11 +1013,19 @@ function statusSeverity(status?: string) {
                   'auto-rule--legacy': info.isLegacy,
                 }"
               >
-                <div class="auto-rule-head">
+                <div class="auto-rule-row1">
                   <div class="auto-rule-device">
                     <i :class="info.deviceIcon" class="auto-rule-icon"></i>
                     <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
                   </div>
+                  <Tag
+                    v-if="!info.rule.enabled"
+                    value="OFF"
+                    severity="secondary"
+                    rounded
+                    class="auto-rule-off-tag"
+                  />
+                  <span class="auto-rule-cond">{{ info.conditionShort }}</span>
                   <InputSwitch
                     v-if="!info.isLegacy"
                     :modelValue="info.rule.enabled"
@@ -934,16 +1039,15 @@ function statusSeverity(status?: string) {
                     rounded
                     v-tooltip.top="'Legacy SCHEDULE_* rule — read-only'"
                   />
-                </div>
-                <div class="auto-rule-condition">
-                  {{ info.conditionText }}
-                </div>
-                <div class="auto-rule-meta">
                   <span class="auto-rule-period">{{ info.periodLabel }}</span>
-                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
-                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
-                  </span>
-                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                  <i
+                    class="pi pi-info-circle auto-rule-info"
+                    v-tooltip.top="
+                      info.rule.lastTriggeredAt
+                        ? `Last triggered: ${formatLastTriggered(info.rule.lastTriggeredAt)}`
+                        : 'Never triggered'
+                    "
+                  ></i>
                 </div>
               </div>
             </div>
@@ -962,115 +1066,40 @@ function statusSeverity(status?: string) {
                   'auto-rule--disabled': !info.rule.enabled,
                 }"
               >
-                <div class="auto-rule-head">
+                <div class="auto-rule-row1">
                   <div class="auto-rule-device">
                     <i :class="info.deviceIcon" class="auto-rule-icon"></i>
                     <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
                   </div>
+                  <Tag
+                    v-if="!info.rule.enabled"
+                    value="OFF"
+                    severity="secondary"
+                    rounded
+                    class="auto-rule-off-tag"
+                  />
+                  <span class="auto-rule-cond"
+                    >{{ info.conditionShort }} → {{ actionLabel(info.rule.action) }}</span
+                  >
                   <InputSwitch
                     :modelValue="info.rule.enabled"
                     :disabled="automations.loading"
                     @update:modelValue="onRuleToggle(info.rule.id)"
                   />
-                </div>
-                <div class="auto-rule-condition">
-                  {{ info.conditionText }}
-                  <span class="auto-rule-action"> → {{ actionLabel(info.rule.action) }} </span>
-                </div>
-                <div class="auto-rule-meta">
                   <span class="auto-rule-period">{{ info.periodLabel }}</span>
-                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
-                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
-                  </span>
-                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                  <i
+                    class="pi pi-info-circle auto-rule-info"
+                    v-tooltip.top="
+                      info.rule.lastTriggeredAt
+                        ? `Last triggered: ${formatLastTriggered(info.rule.lastTriggeredAt)}`
+                        : 'Never triggered'
+                    "
+                  ></i>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </template>
-    </Card>
-
-    <Card>
-      <template #title>
-        <div class="phase-card-title">
-          <span>Phases</span>
-          <Button
-            v-if="activePhaseIndex >= 0"
-            icon="pi pi-ellipsis-v"
-            text
-            rounded
-            severity="secondary"
-            size="small"
-            aria-label="Phase options"
-            :disabled="skipping || ending"
-            @click="togglePhaseMenu"
-          />
-          <Menu ref="phaseMenu" :model="phaseMenuItems" popup />
-        </div>
-      </template>
-      <template #content>
-        <div v-if="sortedPhases.length" class="phases-wrapper">
-          <div class="phase-track">
-            <div class="phase-line">
-              <div class="phase-line-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
-            </div>
-            <div v-for="(phase, idx) in sortedPhases" :key="phase.id || idx" class="phase-step">
-              <div
-                class="phase-dot"
-                :class="{
-                  done: idx < activePhaseIndex,
-                  active: idx === activePhaseIndex,
-                  pending: idx > activePhaseIndex,
-                }"
-              >
-                {{ idx + 1 }}
-              </div>
-              <div class="phase-name" :class="{ active: idx === activePhaseIndex }">
-                {{ phase.name }}
-              </div>
-              <div class="phase-duration">
-                {{ phase.durationDays }} day{{ phase.durationDays !== 1 ? 's' : '' }}
-              </div>
-            </div>
-          </div>
-
-          <div class="progress-block">
-            <div class="progress-header">
-              <span class="progress-label">Overall Progress</span>
-              <span class="progress-value">{{ cycleProgressPercent }}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: cycleProgressPercent + '%' }"></div>
-            </div>
-            <div class="progress-footer">
-              <span>{{ elapsedDays }} days</span>
-              <span>{{ totalDurationDays }} days</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty-state">No phases configured for this grow cycle.</div>
-      </template>
-    </Card>
-
-    <Card>
-      <template #title>Devices</template>
-      <template #content>
-        <div v-if="growDevices.length" class="device-grid">
-          <div
-            v-for="device in growDevices"
-            :key="device.id"
-            class="device-tile"
-            :class="{ active: deviceToggles[device.id!] }"
-          >
-            <span class="device-name">{{ device.name }}</span>
-            <ToggleSwitch
-              :modelValue="deviceToggles[device.id!]"
-              @update:modelValue="(val: boolean) => onToggle(device.id!, val)"
-            />
-          </div>
-        </div>
-        <div v-else class="empty-state">No devices configured for this grow cycle.</div>
       </template>
     </Card>
   </div>
@@ -1673,13 +1702,13 @@ function statusSeverity(status?: string) {
 .auto-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .auto-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .auto-group-header {
@@ -1711,35 +1740,49 @@ function statusSeverity(status?: string) {
 }
 
 .auto-rules {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-2);
+}
+
+@media (max-width: 860px) {
+  .auto-rules {
+    grid-template-columns: 1fr;
+  }
 }
 
 .auto-rule {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   transition: all var(--duration-normal) var(--ease-default);
+  min-width: 0;
 }
 
 .auto-rule--disabled {
-  opacity: 0.55;
+  opacity: 0.7;
+  border-style: dashed;
+  border-color: var(--color-text-muted);
 }
 
 .auto-rule--legacy {
   border-style: dashed;
 }
 
-.auto-rule-head {
+.auto-rule :deep(.p-toggleswitch) {
+  transform: scale(0.75);
+  transform-origin: center;
+}
+
+.auto-rule-row1 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .auto-rule-device {
@@ -1747,6 +1790,7 @@ function statusSeverity(status?: string) {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  flex: 0 1 auto;
 }
 
 .auto-rule-icon {
@@ -1756,7 +1800,7 @@ function statusSeverity(status?: string) {
 }
 
 .auto-rule-name {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-text-primary);
   white-space: nowrap;
@@ -1764,82 +1808,18 @@ function statusSeverity(status?: string) {
   text-overflow: ellipsis;
 }
 
-.auto-rule-condition {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--leading-normal);
-}
-
-.auto-rule-action {
-  color: var(--color-text-primary);
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
-.auto-rule-bar-wrap {
+.auto-rule-status {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.auto-rule-bar {
-  position: relative;
-  width: 100%;
-  height: 6px;
-  background: var(--color-track-bg);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.auto-rule-bar-fill {
-  height: 100%;
-  border-radius: var(--radius-sm);
-  transition:
-    width var(--duration-slow) var(--ease-default),
-    background var(--duration-normal) var(--ease-default);
-}
-
-.auto-rule-bar-fill--safe {
-  background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success-border);
-}
-
-.auto-rule-bar-fill--approaching {
-  background: var(--color-warning);
-  box-shadow: 0 0 6px var(--color-warning-border);
-}
-
-.auto-rule-bar-fill--firing {
-  background: var(--color-danger);
-  box-shadow: 0 0 8px var(--color-danger-border);
-}
-
-.auto-rule-bar-fill--unset,
-.auto-rule-bar-fill--unknown,
-.auto-rule-bar-fill--not-applicable {
-  background: var(--color-bg-muted);
-}
-
-.auto-rule-bar-threshold {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: var(--color-text-secondary);
-  opacity: 0.6;
-  transform: translateX(-1px);
-}
-
-.auto-rule-bar-labels {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .auto-rule-current {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -1861,49 +1841,113 @@ function statusSeverity(status?: string) {
   color: var(--color-text-muted);
 }
 
-.auto-rule-threshold-label {
+.auto-rule-warn-icon {
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+.auto-rule-off-tag {
+  font-size: 0.625rem;
+  padding: 0 0.4rem;
+}
+
+.auto-rule-row2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  min-width: 0;
+}
+
+.auto-rule-cond {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.auto-rule-mini {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
-.auto-rule-proximity-tag {
-  font-size: var(--text-xs);
+.auto-rule-mini-bar {
+  position: relative;
+  width: 48px;
+  height: 4px;
+  background: var(--color-track-bg);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
-.auto-rule-warning {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--color-warning);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-warning-bg);
-  border: 1px solid var(--color-warning-border);
-  border-radius: var(--radius-md);
+.auto-rule-mini-fill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition:
+    width var(--duration-slow) var(--ease-default),
+    background var(--duration-normal) var(--ease-default);
 }
 
-.auto-rule-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.auto-rule-mini-fill--safe {
+  background: var(--color-success);
+}
+
+.auto-rule-mini-fill--approaching {
+  background: var(--color-warning);
+}
+
+.auto-rule-mini-fill--firing {
+  background: var(--color-danger);
+}
+
+.auto-rule-mini-fill--unset,
+.auto-rule-mini-fill--unknown,
+.auto-rule-mini-fill--not-applicable {
+  background: var(--color-bg-muted);
+}
+
+.auto-rule-mini-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--color-text-secondary);
+  opacity: 0.6;
+  transform: translateX(-1px);
+}
+
+.auto-rule-mini-text {
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
 }
 
 .auto-rule-period {
-  padding: 0.125rem var(--space-2);
+  padding: 0.0625rem var(--space-2);
   background: var(--color-bg-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   color: var(--color-text-secondary);
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
-.auto-rule-last-triggered {
-  font-family: var(--font-mono);
+.auto-rule-info {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: help;
+  flex: 0 0 auto;
 }
 </style>
