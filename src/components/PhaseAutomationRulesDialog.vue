@@ -18,8 +18,10 @@ import type {
   UpdateAutomationRulePayload,
 } from '../types/grow'
 import { useAutomationRuleStore } from '../stores/automationRuleStore'
+import { useGrowPhaseStore } from '../stores/growPhaseStore'
+import type { PhaseEnvironmentResponse } from '../stores/growPhaseStore'
 import { extractApiError } from '../utils/errors'
-import { formatSensorType } from '../utils/sensors'
+import { formatSensorType, isRuleBoundarySet } from '../utils/sensors'
 import PhaseRuleForm from './PhaseRuleForm.vue'
 
 type FieldKey = 'deviceId' | 'watchedSensorType' | 'condition' | 'action' | 'period'
@@ -41,10 +43,12 @@ const emit = defineEmits<{
 }>()
 
 const ruleStore = useAutomationRuleStore()
+const phaseStore = useGrowPhaseStore()
 const toast = useToast()
 const confirm = useConfirm()
 
 const rules = ref<AutomationRule[]>([])
+const phaseEnv = ref<PhaseEnvironmentResponse | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const mode = ref<'list' | 'create' | 'edit'>('list')
@@ -94,6 +98,44 @@ function pinnedLabel(rule: AutomationRule): string {
   return rule.condition
 }
 
+function ruleBoundaryWarning(rule: AutomationRule): string | null {
+  if (!phaseEnv.value) {
+    return null
+  }
+  if (rule.watchedSensorType == null) {
+    return null
+  }
+  const { day, night } = phaseEnv.value
+  const periodsToCheck: ('DAY' | 'NIGHT')[] = []
+  if (rule.period === null) {
+    if (day) {
+      periodsToCheck.push('DAY')
+    }
+    if (night) {
+      periodsToCheck.push('NIGHT')
+    }
+    if (periodsToCheck.length === 0) {
+      return 'No phase environment configured'
+    }
+  } else {
+    periodsToCheck.push(rule.period)
+  }
+  const missing: string[] = []
+  for (const p of periodsToCheck) {
+    const env = p === 'DAY' ? day : night
+    if (!isRuleBoundarySet(rule, env)) {
+      missing.push(p)
+    }
+  }
+  if (missing.length === 0) {
+    return null
+  }
+  if (missing.length === periodsToCheck.length) {
+    return `Boundary field unset for ${missing.join(' & ')}`
+  }
+  return `Boundary field unset for ${missing.join(' & ')}`
+}
+
 function matchServerError(message: string): FieldError | null {
   if (message.includes('LIGHT devices are not eligible for automation rules')) {
     return { field: 'deviceId', message }
@@ -110,7 +152,7 @@ function matchServerError(message: string): FieldError | null {
   if (message.includes('watchedSensorType must be null for ALWAYS_ON / ALWAYS_OFF rules')) {
     return { field: 'watchedSensorType', message }
   }
-  if (message.includes('watchedSensorType is required for ABOVE_MAX / BELOW_MIN rules')) {
+  if (message.includes('watchedSensorType is required for threshold conditions')) {
     return { field: 'watchedSensorType', message }
   }
   return null
@@ -123,7 +165,12 @@ async function loadRules() {
   }
   loading.value = true
   try {
-    rules.value = await ruleStore.fetchRulesByPhase(phase.id)
+    const [fetchedRules, fetchedEnv] = await Promise.all([
+      ruleStore.fetchRulesByPhase(phase.id),
+      phaseStore.fetchPhaseEnvironment(phase.id).catch(() => null),
+    ])
+    rules.value = fetchedRules
+    phaseEnv.value = fetchedEnv
   } catch (error) {
     const { message } = extractApiError(error, 'Failed to load rules')
     toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Load failed' })
@@ -297,19 +344,30 @@ function close() {
           </Column>
           <Column header="Condition">
             <template #body="slot">
-              <Tag
-                v-if="isPinned(slot.data)"
-                :value="pinnedLabel(slot.data)"
-                severity="info"
-                rounded
-              />
-              <Tag
-                v-else-if="isLegacy(slot.data)"
-                :value="`${slot.data.condition} (legacy)`"
-                severity="secondary"
-                rounded
-              />
-              <span v-else>{{ slot.data.condition }}</span>
+              <div class="condition-cell">
+                <Tag
+                  v-if="isPinned(slot.data)"
+                  :value="pinnedLabel(slot.data)"
+                  severity="info"
+                  rounded
+                />
+                <Tag
+                  v-else-if="isLegacy(slot.data)"
+                  :value="`${slot.data.condition} (legacy)`"
+                  severity="secondary"
+                  rounded
+                />
+                <span v-else>{{ slot.data.condition }}</span>
+                <Tag
+                  v-if="ruleBoundaryWarning(slot.data)"
+                  :value="ruleBoundaryWarning(slot.data) ?? ''"
+                  severity="warn"
+                  icon="pi pi-exclamation-triangle"
+                  v-tooltip.top="
+                    'The corresponding *Min/*Max/*Target field is not set on the phase environment for this period — this rule will never fire.'
+                  "
+                />
+              </div>
             </template>
           </Column>
           <Column header="Action">
@@ -491,6 +549,13 @@ function close() {
 .row-actions {
   display: inline-flex;
   gap: var(--space-1);
+}
+
+.condition-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .dialog-footer {

@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch 
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
 import type { Device, GrowPhase, PhaseEnvironment } from '../types/grow'
+import { DayNightPeriod } from '../types/grow'
 import {
   addDays,
   daysBetween,
@@ -20,6 +21,11 @@ import ToggleSwitch from 'primevue/toggleswitch'
 import Menu from 'primevue/menu'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useConfirm } from 'primevue/useconfirm'
+import {
+  actionLabel,
+  proximityLabel,
+  useAutomationMonitor,
+} from '../composables/useAutomationMonitor'
 
 const route = useRoute()
 const router = useRouter()
@@ -370,6 +376,98 @@ function fmtTarget(t: number | null): string {
   return t == null ? '—' : String(t)
 }
 
+// ---------- Automations (active phase rules) ----------
+
+const automations = useAutomationMonitor({
+  fetchRulesApi: (phaseId) => store.fetchRulesByPhase(phaseId),
+  getActiveEnv: () => ({ day: activeEnv.value.day, night: activeEnv.value.night }),
+  getActivePeriod: () => activePeriod.value as DayNightPeriod,
+  getActivePhaseId: () => {
+    const idx = activePhaseIndex.value
+    if (idx < 0) return undefined
+    return sortedPhases.value[idx]?.id ?? undefined
+  },
+  getDevices: () => growDevices.value,
+  getReadings: () => ({
+    co2: co2Ppm.value,
+    humidity: humidityPercent.value,
+    temperature: temperatureC.value,
+  }),
+  toggleRuleApi: (id) => store.toggleRule(id),
+})
+
+async function onRuleToggle(ruleId: string) {
+  try {
+    await automations.toggleRule(ruleId)
+  } catch {
+    const { message, status } = extractApiError(new Error('toggle failed'), 'Failed to toggle rule')
+    if (status !== 0) {
+      toast.add({ detail: message, life: 5000, severity: 'error', summary: 'Toggle failed' })
+    }
+  }
+}
+
+function barFillStyle(info: {
+  currentValue: number | null
+  thresholdValue: number | null
+  rule: { condition: import('../types/grow').RuleCondition }
+}): { width: string } {
+  const { currentValue, thresholdValue, rule } = info
+  if (currentValue == null || thresholdValue == null || thresholdValue === 0) {
+    return { width: '0%' }
+  }
+  const ratio = currentValue / thresholdValue
+  const clamped = Math.max(0, Math.min(1.5, ratio))
+  return { width: `${(clamped / 1.5) * 100}%` }
+}
+
+function proximitySeverity(
+  state: 'safe' | 'approaching' | 'firing' | 'unknown' | 'unset' | 'not-applicable',
+): 'success' | 'warn' | 'danger' | 'secondary' {
+  switch (state) {
+    case 'safe': {
+      return 'success'
+    }
+    case 'approaching': {
+      return 'warn'
+    }
+    case 'firing': {
+      return 'danger'
+    }
+    case 'unset': {
+      return 'warn'
+    }
+    case 'unknown': {
+      return 'secondary'
+    }
+    case 'not-applicable': {
+      return 'secondary'
+    }
+  }
+}
+
+function formatLastTriggered(iso: string): string {
+  const then = new Date(iso).getTime()
+  const now = Date.now()
+  const diffMs = now - then
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 1) {
+    return 'just now'
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`
+  }
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    return `${hours}h ago`
+  }
+  const days = Math.floor(hours / 24)
+  if (days < 7) {
+    return `${days}d ago`
+  }
+  return new Date(iso).toLocaleDateString()
+}
+
 watch(
   () => growDevices.value,
   (devices) => {
@@ -492,6 +590,7 @@ onMounted(async () => {
     }
     await reconcileGrowState(cycle)
     await loadActivePhaseEnv()
+    await automations.reload()
   }
 })
 
@@ -702,6 +801,148 @@ function statusSeverity(status?: string) {
                   }}
                   ppm</span
                 >
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
+
+    <Card>
+      <template #title>
+        <div class="auto-card-title">
+          <span>Automations — {{ activePhaseName }}</span>
+          <Tag
+            v-if="activePhaseIndex >= 0 && automations.hasRules"
+            :value="activePeriod"
+            severity="success"
+            rounded
+            v-tooltip.top="'Currently active day/night period'"
+          />
+        </div>
+      </template>
+      <template #content>
+        <div v-if="automations.loading" class="auto-loading">
+          <i class="pi pi-spin pi-spinner" /> Loading automations…
+        </div>
+        <div v-else-if="activePhaseIndex < 0" class="empty-state">
+          No active phase — automations are scoped to a phase.
+        </div>
+        <div v-else-if="!automations.hasRules" class="empty-state">
+          No automation rules configured for this phase.
+        </div>
+        <div v-else class="auto-content">
+          <div v-for="group in automations.groups" :key="group.key" class="auto-group">
+            <div class="auto-group-header">
+              <span class="auto-group-label">{{ group.label }}</span>
+              <span class="auto-group-reading">
+                <span class="auto-group-reading-value">{{ group.currentReading }}</span>
+              </span>
+            </div>
+            <div class="auto-rules">
+              <div
+                v-for="info in group.rules"
+                :key="info.rule.id"
+                class="auto-rule"
+                :class="{ 'auto-rule--disabled': !info.rule.enabled }"
+              >
+                <div class="auto-rule-head">
+                  <div class="auto-rule-device">
+                    <i :class="info.deviceIcon" class="auto-rule-icon"></i>
+                    <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
+                  </div>
+                  <InputSwitch
+                    :modelValue="info.rule.enabled"
+                    :disabled="automations.loading"
+                    @update:modelValue="onRuleToggle(info.rule.id)"
+                  />
+                </div>
+                <div class="auto-rule-condition">
+                  {{ info.conditionText }}
+                  <span class="auto-rule-action"> → {{ actionLabel(info.rule.action) }} </span>
+                </div>
+                <div v-if="info.thresholdValue != null" class="auto-rule-bar-wrap">
+                  <div class="auto-rule-bar">
+                    <div
+                      class="auto-rule-bar-fill"
+                      :class="`auto-rule-bar-fill--${info.proximity}`"
+                      :style="barFillStyle(info)"
+                    ></div>
+                    <div class="auto-rule-bar-threshold" :style="{ left: '66.66%' }"></div>
+                  </div>
+                  <div class="auto-rule-bar-labels">
+                    <span class="auto-rule-current" :class="`auto-rule-current--${info.proximity}`">
+                      {{ info.currentValue ?? '—' }}{{ info.unit }}
+                    </span>
+                    <span class="auto-rule-threshold-label">
+                      {{ info.thresholdValue }}{{ info.unit }} threshold
+                      <Tag
+                        :value="proximityLabel(info.proximity)"
+                        :severity="proximitySeverity(info.proximity)"
+                        rounded
+                        class="auto-rule-proximity-tag"
+                      />
+                    </span>
+                  </div>
+                </div>
+                <div v-else class="auto-rule-warning">
+                  <i class="pi pi-exclamation-triangle"></i>
+                  Threshold not set on the active period environment — this rule will never fire.
+                </div>
+                <div class="auto-rule-meta">
+                  <span class="auto-rule-period">{{ info.periodLabel }}</span>
+                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
+                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
+                  </span>
+                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="automations.pinnedRules.length" class="auto-group">
+            <div class="auto-group-header">
+              <span class="auto-group-label">Pinned</span>
+            </div>
+            <div class="auto-rules">
+              <div
+                v-for="info in automations.pinnedRules"
+                :key="info.rule.id"
+                class="auto-rule auto-rule--pinned"
+                :class="{
+                  'auto-rule--disabled': !info.rule.enabled,
+                  'auto-rule--legacy': info.isLegacy,
+                }"
+              >
+                <div class="auto-rule-head">
+                  <div class="auto-rule-device">
+                    <i :class="info.deviceIcon" class="auto-rule-icon"></i>
+                    <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
+                  </div>
+                  <InputSwitch
+                    v-if="!info.isLegacy"
+                    :modelValue="info.rule.enabled"
+                    :disabled="automations.loading"
+                    @update:modelValue="onRuleToggle(info.rule.id)"
+                  />
+                  <Tag
+                    v-else
+                    value="legacy"
+                    severity="secondary"
+                    rounded
+                    v-tooltip.top="'Legacy SCHEDULE_* rule — read-only'"
+                  />
+                </div>
+                <div class="auto-rule-condition">
+                  {{ info.conditionText }}
+                </div>
+                <div class="auto-rule-meta">
+                  <span class="auto-rule-period">{{ info.periodLabel }}</span>
+                  <span v-if="info.rule.lastTriggeredAt" class="auto-rule-last-triggered">
+                    Last triggered: {{ formatLastTriggered(info.rule.lastTriggeredAt) }}
+                  </span>
+                  <span v-else class="auto-rule-last-triggered muted">Never triggered</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1369,5 +1610,259 @@ function statusSeverity(status?: string) {
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
+}
+
+.auto-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.auto-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-text-muted);
+}
+
+.auto-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.auto-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.auto-group-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.auto-group-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.auto-group-reading {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.auto-group-reading-value {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.auto-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.auto-rule {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.auto-rule--disabled {
+  opacity: 0.55;
+}
+
+.auto-rule--legacy {
+  border-style: dashed;
+}
+
+.auto-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.auto-rule-device {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.auto-rule-icon {
+  color: var(--color-accent);
+  font-size: var(--text-md);
+  flex-shrink: 0;
+}
+
+.auto-rule-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auto-rule-condition {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.auto-rule-action {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.auto-rule-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.auto-rule-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: var(--color-track-bg);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.auto-rule-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition:
+    width var(--duration-slow) var(--ease-default),
+    background var(--duration-normal) var(--ease-default);
+}
+
+.auto-rule-bar-fill--safe {
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success-border);
+}
+
+.auto-rule-bar-fill--approaching {
+  background: var(--color-warning);
+  box-shadow: 0 0 6px var(--color-warning-border);
+}
+
+.auto-rule-bar-fill--firing {
+  background: var(--color-danger);
+  box-shadow: 0 0 8px var(--color-danger-border);
+}
+
+.auto-rule-bar-fill--unset,
+.auto-rule-bar-fill--unknown,
+.auto-rule-bar-fill--not-applicable {
+  background: var(--color-bg-muted);
+}
+
+.auto-rule-bar-threshold {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--color-text-secondary);
+  opacity: 0.6;
+  transform: translateX(-1px);
+}
+
+.auto-rule-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.auto-rule-current {
+  font-weight: 600;
+}
+
+.auto-rule-current--safe {
+  color: var(--color-success);
+}
+
+.auto-rule-current--approaching {
+  color: var(--color-warning);
+}
+
+.auto-rule-current--firing {
+  color: var(--color-danger);
+}
+
+.auto-rule-current--unset,
+.auto-rule-current--unknown,
+.auto-rule-current--not-applicable {
+  color: var(--color-text-muted);
+}
+
+.auto-rule-threshold-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.auto-rule-proximity-tag {
+  font-size: var(--text-xs);
+}
+
+.auto-rule-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+}
+
+.auto-rule-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.auto-rule-period {
+  padding: 0.125rem var(--space-2);
+  background: var(--color-bg-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+.auto-rule-last-triggered {
+  font-family: var(--font-mono);
 }
 </style>

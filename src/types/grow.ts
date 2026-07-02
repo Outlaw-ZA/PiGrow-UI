@@ -43,6 +43,10 @@ export enum DayNightPeriod {
 export enum RuleCondition {
   ABOVE_MAX = 'ABOVE_MAX',
   BELOW_MIN = 'BELOW_MIN',
+  BELOW_MAX = 'BELOW_MAX',
+  ABOVE_MIN = 'ABOVE_MIN',
+  ABOVE_TARGET = 'ABOVE_TARGET',
+  BELOW_TARGET = 'BELOW_TARGET',
   ALWAYS_ON = 'ALWAYS_ON',
   ALWAYS_OFF = 'ALWAYS_OFF',
 }

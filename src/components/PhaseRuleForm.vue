@@ -11,7 +11,7 @@ import type {
   Device,
   UpdateAutomationRulePayload,
 } from '../types/grow'
-import { SENSOR_TYPE_OPTIONS } from '../utils/sensors'
+import { SENSOR_TYPE_OPTIONS, THRESHOLD_RELEVANT_SENSOR_TYPES } from '../utils/sensors'
 
 const props = defineProps<{
   mode: 'create' | 'edit'
@@ -53,30 +53,67 @@ const deviceOptions = computed(() =>
     .map((d) => ({ label: d.name, type: d.type, value: d.id })),
 )
 
-const sensorOptions = SENSOR_TYPE_OPTIONS
-
-const conditionOptions = [
+const conditionGroups = [
   {
-    description: 'Trigger when reading exceeds the max threshold',
-    label: 'Above max',
-    value: RuleCondition.ABOVE_MAX,
+    items: [
+      {
+        description: 'Trigger when reading exceeds the max threshold',
+        label: 'Above max',
+        value: RuleCondition.ABOVE_MAX,
+      },
+      {
+        description: 'Trigger when reading falls below the max threshold (hysteresis-off)',
+        label: 'Below max',
+        value: RuleCondition.BELOW_MAX,
+      },
+      {
+        description: 'Trigger when reading rises above the min threshold (hysteresis-off)',
+        label: 'Above min',
+        value: RuleCondition.ABOVE_MIN,
+      },
+      {
+        description: 'Trigger when reading falls below the min threshold',
+        label: 'Below min',
+        value: RuleCondition.BELOW_MIN,
+      },
+      {
+        description: 'Trigger when reading exceeds the target',
+        label: 'Above target',
+        value: RuleCondition.ABOVE_TARGET,
+      },
+      {
+        description: 'Trigger when reading falls below the target',
+        label: 'Below target',
+        value: RuleCondition.BELOW_TARGET,
+      },
+    ],
+    label: 'Threshold',
   },
   {
-    description: 'Trigger when reading falls below the min threshold',
-    label: 'Below min',
-    value: RuleCondition.BELOW_MIN,
-  },
-  {
-    description: 'Pin device to ON within the rule scope',
-    label: 'Pin ON (this phase)',
-    value: RuleCondition.ALWAYS_ON,
-  },
-  {
-    description: 'Pin device to OFF within the rule scope',
-    label: 'Pin OFF (this phase)',
-    value: RuleCondition.ALWAYS_OFF,
+    items: [
+      {
+        description: 'Pin device to ON within the rule scope',
+        label: 'Pin ON (this phase)',
+        value: RuleCondition.ALWAYS_ON,
+      },
+      {
+        description: 'Pin device to OFF within the rule scope',
+        label: 'Pin OFF (this phase)',
+        value: RuleCondition.ALWAYS_OFF,
+      },
+    ],
+    label: 'Pin',
   },
 ]
+
+const THRESHOLD_CONDITIONS = new Set<RuleCondition>([
+  RuleCondition.ABOVE_MAX,
+  RuleCondition.BELOW_MIN,
+  RuleCondition.BELOW_MAX,
+  RuleCondition.ABOVE_MIN,
+  RuleCondition.ABOVE_TARGET,
+  RuleCondition.BELOW_TARGET,
+])
 
 const periodOptions: { label: string; value: PeriodChoice }[] = [
   { label: 'Day', value: DayNightPeriod.DAY },
@@ -95,11 +132,36 @@ const isAlways = computed(
     draft.value.condition === RuleCondition.ALWAYS_OFF,
 )
 
-const isThreshold = computed(
+const isThreshold = computed(() => THRESHOLD_CONDITIONS.has(draft.value.condition))
+
+const isTargetCondition = computed(
   () =>
-    draft.value.condition === RuleCondition.ABOVE_MAX ||
-    draft.value.condition === RuleCondition.BELOW_MIN,
+    draft.value.condition === RuleCondition.ABOVE_TARGET ||
+    draft.value.condition === RuleCondition.BELOW_TARGET,
 )
+
+const sensorOptionsForCondition = computed(() => {
+  if (!isThreshold.value) {
+    return SENSOR_TYPE_OPTIONS
+  }
+  return SENSOR_TYPE_OPTIONS.filter((o) =>
+    (THRESHOLD_RELEVANT_SENSOR_TYPES as readonly SensorType[]).includes(o.value),
+  )
+})
+
+const targetFieldHint = computed(() => {
+  if (!isTargetCondition.value || draft.value.watchedSensorType == null) {
+    return null
+  }
+  const sensorLabel = SENSOR_TYPE_OPTIONS.find(
+    (o) => o.value === draft.value.watchedSensorType,
+  )?.label
+  if (!sensorLabel) {
+    return null
+  }
+  const targetKey = `${sensorLabel.toLowerCase()}Target`
+  return `Ensure the relevant Target field (e.g. ${targetKey}) is set on this phase's DAY/NIGHT environment, or this rule will never fire.`
+})
 
 function emptyDraft(): Draft {
   return {
@@ -172,7 +234,7 @@ const validationError = computed<string | null>(() => {
     return 'Select a device.'
   }
   if (isThreshold.value && draft.value.watchedSensorType == null) {
-    return 'watchedSensorType is required for ABOVE_MAX / BELOW_MIN rules'
+    return 'watchedSensorType is required for threshold conditions (ABOVE_MAX, BELOW_MIN, ABOVE_MIN, BELOW_MAX, ABOVE_TARGET, BELOW_TARGET)'
   }
   if (isAlways.value && draft.value.watchedSensorType != null) {
     return 'watchedSensorType must be null for ALWAYS_ON / ALWAYS_OFF rules'
@@ -254,7 +316,7 @@ function onSubmit() {
         <label class="field-label">Watched sensor</label>
         <Select
           v-model="draft.watchedSensorType"
-          :options="sensorOptions"
+          :options="sensorOptionsForCondition"
           option-label="label"
           option-value="value"
           placeholder="Select sensor"
@@ -264,6 +326,9 @@ function onSubmit() {
         <p v-if="inlineErrorFor('watchedSensorType')" class="field-error">
           {{ inlineErrorFor('watchedSensorType') }}
         </p>
+        <Message v-if="targetFieldHint" severity="info" :closable="false" class="form-message">
+          {{ targetFieldHint }}
+        </Message>
       </div>
       <div class="field" v-else>
         <label class="field-label">Watched sensor</label>
@@ -274,9 +339,11 @@ function onSubmit() {
         <label class="field-label">Condition</label>
         <Select
           v-model="draft.condition"
-          :options="conditionOptions"
+          :options="conditionGroups"
           option-label="label"
           option-value="value"
+          option-group-label="label"
+          option-group-children="items"
           class="full-width"
         />
       </div>
