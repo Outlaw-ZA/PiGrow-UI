@@ -49,6 +49,7 @@ export enum RuleCondition {
   BELOW_TARGET = 'BELOW_TARGET',
   ALWAYS_ON = 'ALWAYS_ON',
   ALWAYS_OFF = 'ALWAYS_OFF',
+  INTERVAL = 'INTERVAL',
 }
 
 export enum DeviceAction {
@@ -197,6 +198,8 @@ export interface AutomationRule {
   condition: RuleCondition
   action: DeviceAction
   cooldownSeconds: number
+  intervalOnSeconds: number | null
+  intervalCycleSeconds: number | null
   enabled: boolean
   lastTriggeredAt: string | null
   createdAt: string
@@ -212,6 +215,8 @@ export interface CreateAutomationRulePayload {
   condition: RuleCondition
   action: DeviceAction
   cooldownSeconds?: number
+  intervalOnSeconds?: number
+  intervalCycleSeconds?: number
   enabled?: boolean
 }
 
@@ -222,6 +227,8 @@ export interface UpdateAutomationRulePayload {
   condition?: RuleCondition
   action?: DeviceAction
   cooldownSeconds?: number
+  intervalOnSeconds?: number | null
+  intervalCycleSeconds?: number | null
   enabled?: boolean
 }
 

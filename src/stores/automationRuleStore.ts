@@ -29,7 +29,7 @@ export const useAutomationRuleStore = defineStore('automationRule', () => {
   }
 
   async function updateRule(id: string, payload: UpdateAutomationRulePayload) {
-    const res = await axios.patch(`${API_BASE}/automation-rules/${id}`, payload)
+    const res = await axios.put(`${API_BASE}/automation-rules/${id}`, payload)
     return res.data as AutomationRule
   }
 
