@@ -205,8 +205,8 @@ function emptyDraft(): Draft {
     condition: props.initialCondition ?? RuleCondition.ABOVE_MAX,
     cooldownSeconds: 180,
     deviceId: props.devices.find((d) => d.isActive && d.type !== DeviceType.LIGHT)?.id ?? null,
-    intervalCycleSeconds: null,
-    intervalOnSeconds: null,
+    intervalCycleSeconds: props.initialCondition === RuleCondition.INTERVAL ? 300 : null,
+    intervalOnSeconds: props.initialCondition === RuleCondition.INTERVAL ? 30 : null,
     period: null,
     watchedSensorType: SensorType.TEMPERATURE,
   }
@@ -240,6 +240,13 @@ watch(
 watch(
   () => draft.value.condition,
   (next, prev) => {
+    // INTERVAL cleanup — runs as a separate block so the new-condition
+    // Branches also apply when transitioning away from INTERVAL.
+    if (prev === RuleCondition.INTERVAL) {
+      draft.value.intervalOnSeconds = null
+      draft.value.intervalCycleSeconds = null
+    }
+
     if (next === RuleCondition.INTERVAL) {
       draft.value.action = DeviceAction.ON
       draft.value.watchedSensorType = null
@@ -249,16 +256,18 @@ watch(
       if (draft.value.intervalCycleSeconds == null) {
         draft.value.intervalCycleSeconds = 300
       }
-    } else if (prev === RuleCondition.INTERVAL) {
-      draft.value.intervalOnSeconds = null
-      draft.value.intervalCycleSeconds = null
     } else if (next === RuleCondition.ALWAYS_ON) {
       draft.value.action = DeviceAction.ON
       draft.value.watchedSensorType = null
     } else if (next === RuleCondition.ALWAYS_OFF) {
       draft.value.action = DeviceAction.OFF
       draft.value.watchedSensorType = null
-    } else if (prev === RuleCondition.ALWAYS_ON || prev === RuleCondition.ALWAYS_OFF) {
+    } else if (
+      prev === RuleCondition.ALWAYS_ON ||
+      prev === RuleCondition.ALWAYS_OFF ||
+      prev === RuleCondition.INTERVAL
+    ) {
+      // Leaving a pin or INTERVAL for a threshold — reset sensor.
       draft.value.watchedSensorType = SensorType.TEMPERATURE
     }
   },
