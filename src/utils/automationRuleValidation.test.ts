@@ -46,13 +46,16 @@ describe('validateRuleDraft INTERVAL', () => {
       ),
     ).toBeNull()
   })
-  it('blocks cycle <= on', () => {
+  it.each([
+    { cycle: 300, label: 'cycle == on', on: 300 },
+    { cycle: 299, label: 'cycle < on', on: 300 },
+  ])('blocks cycle <= on ($label)', ({ cycle, on }) => {
     expect(
       validateRuleDraft(
         base({
           condition: RuleCondition.INTERVAL,
-          intervalCycleSeconds: 300,
-          intervalOnSeconds: 300,
+          intervalCycleSeconds: cycle,
+          intervalOnSeconds: on,
           watchedSensorType: null,
         }),
         [fan],
@@ -71,6 +74,19 @@ describe('validateRuleDraft INTERVAL', () => {
         [fan],
       ),
     ).toMatch(/intervalOnSeconds is required/)
+  })
+  it('blocks missing cycleSeconds', () => {
+    expect(
+      validateRuleDraft(
+        base({
+          condition: RuleCondition.INTERVAL,
+          intervalCycleSeconds: null,
+          intervalOnSeconds: 30,
+          watchedSensorType: null,
+        }),
+        [fan],
+      ),
+    ).toMatch(/intervalCycleSeconds is required/)
   })
   it('blocks LIGHT device', () => {
     const light = { ...fan, id: 'dL', type: DeviceType.LIGHT }

@@ -25,7 +25,14 @@ import { formatSensorType, isRuleBoundarySet } from '../utils/sensors'
 import { formatIntervalRule } from '../utils/automationRuleDisplay'
 import PhaseRuleForm from './PhaseRuleForm.vue'
 
-type FieldKey = 'deviceId' | 'watchedSensorType' | 'condition' | 'action' | 'period'
+type FieldKey =
+  | 'deviceId'
+  | 'watchedSensorType'
+  | 'condition'
+  | 'action'
+  | 'period'
+  | 'intervalOnSeconds'
+  | 'intervalCycleSeconds'
 
 interface FieldError {
   field: FieldKey
