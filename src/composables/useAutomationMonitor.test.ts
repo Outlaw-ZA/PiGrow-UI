@@ -44,7 +44,7 @@ describe('useAutomationMonitor.toggleRule', () => {
         getActivePeriod: () => DayNightPeriod.DAY,
         getActivePhaseId: () => 'p1',
         getDevices: () => [],
-        getReadings: () => ({ temperature: 20, humidity: 50, co2: 400 }),
+        getReadings: () => ({ co2: 400, humidity: 50, temperature: 20 }),
         toggleRuleApi,
       })
     })

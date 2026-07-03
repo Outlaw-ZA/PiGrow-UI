@@ -22,7 +22,7 @@ import { useGrowPhaseStore } from '../stores/growPhaseStore'
 import type { PhaseEnvironmentResponse } from '../stores/growPhaseStore'
 import { extractApiError } from '../utils/errors'
 import { formatSensorType, isRuleBoundarySet } from '../utils/sensors'
-import { formatIntervalRule } from '../utils/automationRuleDisplay'
+import { formatIntervalRule, formatScheduleTime } from '../utils/automationRuleDisplay'
 import PhaseRuleForm from './PhaseRuleForm.vue'
 
 type FieldKey =
@@ -33,6 +33,7 @@ type FieldKey =
   | 'period'
   | 'intervalOnSeconds'
   | 'intervalCycleSeconds'
+  | 'scheduleTimeMinutes'
 
 interface FieldError {
   field: FieldKey
@@ -80,16 +81,6 @@ const formKey = computed(
 function deviceName(rule: AutomationRule): string {
   const d = rule.device ?? deviceById.value.get(rule.deviceId)
   return d?.name ?? rule.deviceId
-}
-
-function isLegacy(rule: AutomationRule): boolean {
-  // Legacy rows from before the enum swap; the API still returns them for
-  // LIGHT devices' historical rules (will never fire). Treated as read-only
-  // Except for delete.
-  return (
-    (rule.condition as unknown) === ('SCHEDULE_ON' as RuleCondition) ||
-    (rule.condition as unknown) === ('SCHEDULE_OFF' as RuleCondition)
-  )
 }
 
 function isPinned(rule: AutomationRule): boolean {
@@ -148,9 +139,6 @@ function matchServerError(message: string): FieldError | null {
   if (message.includes('LIGHT devices are not eligible for automation rules')) {
     return { field: 'deviceId', message }
   }
-  if (message.includes('SCHEDULE_ON/SCHEDULE_OFF conditions are no longer supported')) {
-    return { field: 'condition', message }
-  }
   if (message.includes('action must be ON for condition ALWAYS_ON')) {
     return { field: 'action', message }
   }
@@ -168,6 +156,21 @@ function matchServerError(message: string): FieldError | null {
   }
   if (message.includes('watchedSensorType must be null for INTERVAL rules')) {
     return { field: 'watchedSensorType', message }
+  }
+  if (message.includes('scheduleTimeMinutes is required')) {
+    return { field: 'scheduleTimeMinutes', message }
+  }
+  if (message.includes('scheduleTimeMinutes must be between 0 and 1439')) {
+    return { field: 'scheduleTimeMinutes', message }
+  }
+  if (message.includes('watchedSensorType must be null for SCHEDULE')) {
+    return { field: 'watchedSensorType', message }
+  }
+  if (
+    message.includes('action must be ON for condition SCHEDULE_ON') ||
+    message.includes('action must be OFF for condition SCHEDULE_OFF')
+  ) {
+    return { field: 'action', message }
   }
   if (
     message.includes('intervalOnSeconds is required') ||
@@ -223,9 +226,6 @@ function showAddForm(condition?: RuleCondition) {
 }
 
 function showEditForm(rule: AutomationRule) {
-  if (isLegacy(rule)) {
-    return
-  }
   editingRule.value = rule
   initialCondition.value = undefined
   fieldError.value = null
@@ -291,19 +291,13 @@ async function onToggle(rule: AutomationRule) {
 
 function onDelete(rule: AutomationRule) {
   const phaseName = props.phase?.name ?? 'this phase'
-  const isLeg = isLegacy(rule)
   confirm.require({
     accept: async () => {
       try {
         await ruleStore.deleteRule(rule.id)
         rules.value = rules.value.filter((r) => r.id !== rule.id)
         emit('changed')
-        toast.add({
-          detail: isLeg ? 'Legacy rule deleted' : 'Rule deleted',
-          life: 3000,
-          severity: 'success',
-          summary: 'Deleted',
-        })
+        toast.add({ detail: 'Rule deleted', life: 3000, severity: 'success', summary: 'Deleted' })
       } catch (error) {
         const { message } = extractApiError(error, 'Failed to delete rule')
         toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
@@ -311,11 +305,9 @@ function onDelete(rule: AutomationRule) {
     },
     acceptLabel: 'Delete',
     acceptProps: { severity: 'danger' },
-    header: isLeg ? 'Delete legacy rule' : 'Delete rule',
+    header: 'Delete rule',
     icon: 'pi pi-exclamation-triangle',
-    message: isLeg
-      ? `Remove this legacy rule from "${phaseName}"? Legacy rules no longer fire and can be safely deleted.`
-      : `Remove this automation rule for "${phaseName}"?`,
+    message: `Remove this automation rule for "${phaseName}"?`,
     rejectLabel: 'Cancel',
   })
 }
@@ -374,14 +366,16 @@ function close() {
                   rounded
                 />
                 <Tag
-                  v-else-if="isLegacy(slot.data)"
-                  :value="`${slot.data.condition} (legacy)`"
-                  severity="secondary"
+                  v-else-if="slot.data.condition === 'INTERVAL'"
+                  :value="formatIntervalRule(slot.data)"
+                  severity="info"
                   rounded
                 />
                 <Tag
-                  v-else-if="slot.data.condition === 'INTERVAL'"
-                  :value="formatIntervalRule(slot.data)"
+                  v-else-if="
+                    slot.data.condition === 'SCHEDULE_ON' || slot.data.condition === 'SCHEDULE_OFF'
+                  "
+                  :value="`${slot.data.condition === 'SCHEDULE_ON' ? '🕒 Schedule ON' : '🕒 Schedule OFF'} at ${formatScheduleTime(slot.data.scheduleTimeMinutes)}`"
                   severity="info"
                   rounded
                 />
@@ -412,6 +406,19 @@ function close() {
               <span class="type-pill">{{ slot.data.period ?? 'Both' }}</span>
             </template>
           </Column>
+          <Column header="Schedule">
+            <template #body="slot">
+              <span
+                v-if="
+                  slot.data.condition === 'SCHEDULE_ON' || slot.data.condition === 'SCHEDULE_OFF'
+                "
+                class="meta-code"
+              >
+                {{ formatScheduleTime(slot.data.scheduleTimeMinutes) }}
+              </span>
+              <span v-else class="muted">—</span>
+            </template>
+          </Column>
           <Column header="Cooldown" field="cooldownSeconds" />
           <Column header="Last triggered">
             <template #body="slot">
@@ -425,7 +432,6 @@ function close() {
             <template #body="slot">
               <InputSwitch
                 :model-value="slot.data.enabled"
-                :disabled="isLegacy(slot.data)"
                 @update:model-value="onToggle(slot.data)"
               />
             </template>
@@ -439,8 +445,8 @@ function close() {
                   rounded
                   size="small"
                   severity="secondary"
-                  v-tooltip.top="isLegacy(slot.data) ? 'Legacy rule (read-only)' : 'Edit rule'"
-                  :disabled="saving || isLegacy(slot.data)"
+                  v-tooltip.top="'Edit rule'"
+                  :disabled="saving"
                   @click="showEditForm(slot.data)"
                 />
                 <Button

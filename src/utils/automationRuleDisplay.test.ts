@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conditionShort, formatIntervalRule } from './automationRuleDisplay'
+import { conditionShort, formatIntervalRule, formatScheduleTime } from './automationRuleDisplay'
 import { DeviceAction, RuleCondition, SensorType } from '../types/grow'
 import type { AutomationRule } from '../types/grow'
 
@@ -13,6 +13,9 @@ const intervalRule = (on: number | null, cyc: number | null) =>
 const thresholdRule = (condition: RuleCondition, watchedSensorType: SensorType) =>
   ({ condition, watchedSensorType }) as AutomationRule
 
+const scheduleRule = (condition: RuleCondition, scheduleTimeMinutes: number | null) =>
+  ({ condition, scheduleTimeMinutes }) as AutomationRule
+
 describe('formatIntervalRule', () => {
   it('formats 30/300', () => {
     expect(formatIntervalRule(intervalRule(30, 300))).toBe('ON 30s every 5m (OFF 4m 30s)')
@@ -22,6 +25,33 @@ describe('formatIntervalRule', () => {
   })
   it('handles nulls', () => {
     expect(formatIntervalRule(intervalRule(null, null))).toBe('Interval')
+  })
+})
+
+describe('formatScheduleTime', () => {
+  it('formats 0 as 00:00', () => {
+    expect(formatScheduleTime(0)).toBe('00:00')
+  })
+  it('formats 480 as 08:00', () => {
+    expect(formatScheduleTime(480)).toBe('08:00')
+  })
+  it('formats 1140 as 19:00', () => {
+    expect(formatScheduleTime(1140)).toBe('19:00')
+  })
+  it('formats 1439 as 23:59', () => {
+    expect(formatScheduleTime(1439)).toBe('23:59')
+  })
+  it('returns "—" for null', () => {
+    expect(formatScheduleTime(null)).toBe('—')
+  })
+  it('returns "—" for undefined', () => {
+    expect(formatScheduleTime()).toBe('—')
+  })
+  it('returns "—" for out-of-range negative', () => {
+    expect(formatScheduleTime(-1)).toBe('—')
+  })
+  it('returns "—" for out-of-range > 1439', () => {
+    expect(formatScheduleTime(1440)).toBe('—')
   })
 })
 
@@ -106,10 +136,18 @@ describe('conditionShort', () => {
     expect(conditionShort(intervalRule(null, null))).toBe('Interval')
   })
 
-  it('falls back to String(condition) for unknown conditions', () => {
-    expect(conditionShort({ condition: 'SCHEDULE_ON' as RuleCondition } as AutomationRule)).toBe(
-      'SCHEDULE_ON',
+  it('renders SCHEDULE_ON as "ON daily at HH:MM"', () => {
+    expect(conditionShort(scheduleRule(RuleCondition.SCHEDULE_ON, 480))).toBe('ON daily at 08:00')
+  })
+
+  it('renders SCHEDULE_OFF as "OFF daily at HH:MM"', () => {
+    expect(conditionShort(scheduleRule(RuleCondition.SCHEDULE_OFF, 1140))).toBe(
+      'OFF daily at 19:00',
     )
+  })
+
+  it('renders SCHEDULE_ON with null time as "ON daily at —"', () => {
+    expect(conditionShort(scheduleRule(RuleCondition.SCHEDULE_ON, null))).toBe('ON daily at —')
   })
 })
 

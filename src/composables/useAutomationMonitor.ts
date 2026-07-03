@@ -7,7 +7,11 @@ import {
   SensorType,
 } from '../types/grow'
 import type { AutomationRule, Device, PhaseEnvironment } from '../types/grow'
-import { conditionShort, formatIntervalRule } from '../utils/automationRuleDisplay'
+import {
+  conditionShort,
+  formatIntervalRule,
+  formatScheduleTime,
+} from '../utils/automationRuleDisplay'
 import {
   THRESHOLD_RELEVANT_SENSOR_TYPES,
   conditionToBoundarySide,
@@ -33,7 +37,6 @@ export interface RuleDisplayInfo {
   unit: string
   proximity: ProximityState
   isPinned: boolean
-  isLegacy: boolean
   periodLabel: string
 }
 
@@ -61,6 +64,7 @@ export interface AutomationMonitor {
   groups: AutomationGroup[]
   pinnedRules: RuleDisplayInfo[]
   intervalRules: RuleDisplayInfo[]
+  scheduleRules: RuleDisplayInfo[]
   hasRules: boolean
   toggleRule: (id: string) => Promise<void>
   reload: () => Promise<void>
@@ -135,6 +139,12 @@ function conditionPhrase(rule: AutomationRule): string {
     }
     case RuleCondition.INTERVAL: {
       return formatIntervalRule(rule)
+    }
+    case RuleCondition.SCHEDULE_ON: {
+      return `Schedule ON daily at ${formatScheduleTime(rule.scheduleTimeMinutes)}`
+    }
+    case RuleCondition.SCHEDULE_OFF: {
+      return `Schedule OFF daily at ${formatScheduleTime(rule.scheduleTimeMinutes)}`
     }
     default: {
       return String(rule.condition)
@@ -309,10 +319,9 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
     const proximity = computeProximity(rule, current, threshold)
     const isPinned =
       rule.condition === RuleCondition.ALWAYS_ON || rule.condition === RuleCondition.ALWAYS_OFF
-    const isLegacy =
-      (rule.condition as unknown) === ('SCHEDULE_ON' as RuleCondition) ||
-      (rule.condition as unknown) === ('SCHEDULE_OFF' as RuleCondition)
-    const isUnset = threshold == null && !isPinned && !isLegacy && sensorType != null
+    const isSchedule =
+      rule.condition === RuleCondition.SCHEDULE_ON || rule.condition === RuleCondition.SCHEDULE_OFF
+    const isUnset = threshold == null && !isPinned && !isSchedule && sensorType != null
     const effectiveThreshold = isUnset && env.day === null && env.night === null ? null : threshold
     const effectiveProximity: ProximityState =
       isUnset && effectiveThreshold == null ? 'unset' : proximity
@@ -327,7 +336,6 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
       currentValue: current,
       device,
       deviceIcon: deviceIcon(device),
-      isLegacy,
       isPinned,
       periodLabel: periodLabelFor(rule.period),
       proximity: effectiveProximity,
@@ -344,7 +352,7 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
     const result: AutomationGroup[] = []
     for (const g of SENSOR_GROUP_ORDER) {
       const groupRules = displayRules.value.filter((r) => {
-        if (r.isPinned || r.isLegacy) {
+        if (r.isPinned) {
           return false
         }
         const st = r.rule.watchedSensorType
@@ -367,7 +375,15 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
   })
 
   const pinnedRules = computed<RuleDisplayInfo[]>(() =>
-    displayRules.value.filter((r) => r.isPinned || r.isLegacy),
+    displayRules.value.filter((r) => r.isPinned),
+  )
+
+  const scheduleRules = computed<RuleDisplayInfo[]>(() =>
+    displayRules.value.filter(
+      (r) =>
+        r.rule.condition === RuleCondition.SCHEDULE_ON ||
+        r.rule.condition === RuleCondition.SCHEDULE_OFF,
+    ),
   )
 
   const intervalRules = computed<RuleDisplayInfo[]>(() =>
@@ -393,6 +409,7 @@ export function useAutomationMonitor(input: AutomationMonitorInput): AutomationM
     pinnedRules,
     reload,
     rules,
+    scheduleRules,
     toggleRule,
   }) as unknown as AutomationMonitor
 }

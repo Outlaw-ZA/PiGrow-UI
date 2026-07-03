@@ -1010,7 +1010,6 @@ function statusSeverity(status?: string) {
                 class="auto-rule auto-rule--pinned"
                 :class="{
                   'auto-rule--disabled': !info.rule.enabled,
-                  'auto-rule--legacy': info.isLegacy,
                 }"
               >
                 <div class="auto-rule-row1">
@@ -1027,17 +1026,9 @@ function statusSeverity(status?: string) {
                   />
                   <span class="auto-rule-cond">{{ info.conditionShort }}</span>
                   <InputSwitch
-                    v-if="!info.isLegacy"
                     :modelValue="info.rule.enabled"
                     :disabled="automations.loading"
                     @update:modelValue="onRuleToggle(info.rule.id)"
-                  />
-                  <Tag
-                    v-else
-                    value="legacy"
-                    severity="secondary"
-                    rounded
-                    v-tooltip.top="'Legacy SCHEDULE_* rule — read-only'"
                   />
                   <span class="auto-rule-period">{{ info.periodLabel }}</span>
                   <i
@@ -1081,6 +1072,51 @@ function statusSeverity(status?: string) {
                   <span class="auto-rule-cond"
                     >{{ info.conditionShort }} → {{ actionLabel(info.rule.action) }}</span
                   >
+                  <InputSwitch
+                    :modelValue="info.rule.enabled"
+                    :disabled="automations.loading"
+                    @update:modelValue="onRuleToggle(info.rule.id)"
+                  />
+                  <span class="auto-rule-period">{{ info.periodLabel }}</span>
+                  <i
+                    class="pi pi-info-circle auto-rule-info"
+                    v-tooltip.top="
+                      info.rule.lastTriggeredAt
+                        ? `Last triggered: ${formatLastTriggered(info.rule.lastTriggeredAt)}`
+                        : 'Never triggered'
+                    "
+                  ></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="automations.scheduleRules.length" class="auto-group">
+            <div class="auto-group-header">
+              <span class="auto-group-label">Schedule</span>
+            </div>
+            <div class="auto-rules">
+              <div
+                v-for="info in automations.scheduleRules"
+                :key="info.rule.id"
+                class="auto-rule auto-rule--pinned"
+                :class="{
+                  'auto-rule--disabled': !info.rule.enabled,
+                }"
+              >
+                <div class="auto-rule-row1">
+                  <div class="auto-rule-device">
+                    <i :class="info.deviceIcon" class="auto-rule-icon"></i>
+                    <span class="auto-rule-name">{{ info.device?.name ?? 'Unknown device' }}</span>
+                  </div>
+                  <Tag
+                    v-if="!info.rule.enabled"
+                    value="OFF"
+                    severity="secondary"
+                    rounded
+                    class="auto-rule-off-tag"
+                  />
+                  <span class="auto-rule-cond">{{ info.conditionShort }}</span>
                   <InputSwitch
                     :modelValue="info.rule.enabled"
                     :disabled="automations.loading"

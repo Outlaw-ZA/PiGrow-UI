@@ -47,3 +47,45 @@ describe('PhaseRuleForm INTERVAL branch', () => {
     expect((w.vm as any).draft.intervalCycleSeconds).toBeNull()
   })
 })
+
+describe('PhaseRuleForm SCHEDULE branch', () => {
+  it('shows hour/minute pickers and hides sensor for SCHEDULE_ON', () => {
+    const w = mount(PhaseRuleForm, {
+      global: { stubs: primeVueStubs },
+      props: props({ initialCondition: RuleCondition.SCHEDULE_ON }),
+    })
+    expect(w.find('[data-testid="schedule-hour"]').exists()).toBe(true)
+    expect(w.find('[data-testid="schedule-minute"]').exists()).toBe(true)
+    expect(w.find('[data-testid="sensor-picker"]').exists()).toBe(false)
+    expect(w.find('[data-testid="interval-on"]').exists()).toBe(false)
+  })
+
+  it('initializes action=OFF and scheduleTimeMinutes=480 for SCHEDULE_OFF', () => {
+    const w = mount(PhaseRuleForm, {
+      global: { stubs: primeVueStubs },
+      props: props({ initialCondition: RuleCondition.SCHEDULE_OFF }),
+    })
+    expect((w.vm as any).draft.action).toBe(DeviceAction.OFF)
+    expect((w.vm as any).draft.scheduleTimeMinutes).toBe(480)
+  })
+
+  it('initializes action=ON and scheduleTimeMinutes=480 for SCHEDULE_ON', () => {
+    const w = mount(PhaseRuleForm, {
+      global: { stubs: primeVueStubs },
+      props: props({ initialCondition: RuleCondition.SCHEDULE_ON }),
+    })
+    expect((w.vm as any).draft.action).toBe(DeviceAction.ON)
+    expect((w.vm as any).draft.scheduleTimeMinutes).toBe(480)
+  })
+
+  it('clears scheduleTimeMinutes when switching away from SCHEDULE_ON', async () => {
+    const w = mount(PhaseRuleForm, {
+      global: { stubs: primeVueStubs },
+      props: props({ initialCondition: RuleCondition.SCHEDULE_ON }),
+    })
+    expect((w.vm as any).draft.scheduleTimeMinutes).toBe(480)
+    ;(w.vm as any).draft.condition = RuleCondition.ALWAYS_ON
+    await w.vm.$nextTick()
+    expect((w.vm as any).draft.scheduleTimeMinutes).toBeNull()
+  })
+})

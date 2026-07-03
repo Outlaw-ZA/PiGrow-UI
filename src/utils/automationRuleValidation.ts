@@ -16,6 +16,7 @@ export interface RuleDraft {
   cooldownSeconds: number
   intervalOnSeconds: number | null
   intervalCycleSeconds: number | null
+  scheduleTimeMinutes: number | null
 }
 
 const THRESHOLD = new Set<RuleCondition>([
@@ -26,6 +27,8 @@ const THRESHOLD = new Set<RuleCondition>([
   RuleCondition.ABOVE_TARGET,
   RuleCondition.BELOW_TARGET,
 ])
+
+const SCHEDULE = new Set<RuleCondition>([RuleCondition.SCHEDULE_ON, RuleCondition.SCHEDULE_OFF])
 
 export function validateRuleDraft(d: RuleDraft, devices: Device[]): string | null {
   if (!d.deviceId) {
@@ -51,9 +54,34 @@ export function validateRuleDraft(d: RuleDraft, devices: Device[]): string | nul
     if (d.intervalCycleSeconds <= d.intervalOnSeconds) {
       return 'intervalCycleSeconds must be greater than intervalOnSeconds'
     }
+    if (d.scheduleTimeMinutes != null) {
+      return 'scheduleTimeMinutes must be null for INTERVAL rules'
+    }
+  } else if (SCHEDULE.has(d.condition)) {
+    if (d.watchedSensorType != null) {
+      return 'watchedSensorType must be null for SCHEDULE_ON / SCHEDULE_OFF rules'
+    }
+    if (d.intervalOnSeconds != null || d.intervalCycleSeconds != null) {
+      return 'intervalOnSeconds and intervalCycleSeconds must be null for SCHEDULE_ON / SCHEDULE_OFF rules'
+    }
+    if (d.scheduleTimeMinutes == null) {
+      return 'scheduleTimeMinutes is required for SCHEDULE_ON / SCHEDULE_OFF rules'
+    }
+    if (d.scheduleTimeMinutes < 0 || d.scheduleTimeMinutes > 1439) {
+      return 'scheduleTimeMinutes must be between 0 and 1439 (minutes from midnight)'
+    }
+    if (d.condition === RuleCondition.SCHEDULE_ON && d.action !== DeviceAction.ON) {
+      return 'action must be ON for condition SCHEDULE_ON'
+    }
+    if (d.condition === RuleCondition.SCHEDULE_OFF && d.action !== DeviceAction.OFF) {
+      return 'action must be OFF for condition SCHEDULE_OFF'
+    }
   } else {
     if (d.intervalOnSeconds != null || d.intervalCycleSeconds != null) {
       return 'intervalOnSeconds and intervalCycleSeconds must be null for non-INTERVAL rules'
+    }
+    if (d.scheduleTimeMinutes != null) {
+      return 'scheduleTimeMinutes is only valid for SCHEDULE_ON / SCHEDULE_OFF rules'
     }
     if (THRESHOLD.has(d.condition) && d.watchedSensorType == null) {
       return 'watchedSensorType is required for threshold conditions (ABOVE_MAX, BELOW_MIN, ABOVE_MIN, BELOW_MAX, ABOVE_TARGET, BELOW_TARGET)'
@@ -95,6 +123,12 @@ export function buildCreatePayload(d: RuleDraft, growPhaseId: string): CreateAut
       intervalOnSeconds: d.intervalOnSeconds!,
     }
   }
+  if (SCHEDULE.has(d.condition)) {
+    return {
+      ...base,
+      scheduleTimeMinutes: d.scheduleTimeMinutes!,
+    }
+  }
   return base
 }
 
@@ -112,7 +146,21 @@ export function buildUpdatePayload(d: RuleDraft): UpdateAutomationRulePayload {
       ...base,
       intervalCycleSeconds: d.intervalCycleSeconds!,
       intervalOnSeconds: d.intervalOnSeconds!,
+      scheduleTimeMinutes: null,
     }
   }
-  return { ...base, intervalCycleSeconds: null, intervalOnSeconds: null }
+  if (SCHEDULE.has(d.condition)) {
+    return {
+      ...base,
+      intervalCycleSeconds: null,
+      intervalOnSeconds: null,
+      scheduleTimeMinutes: d.scheduleTimeMinutes!,
+    }
+  }
+  return {
+    ...base,
+    intervalCycleSeconds: null,
+    intervalOnSeconds: null,
+    scheduleTimeMinutes: null,
+  }
 }

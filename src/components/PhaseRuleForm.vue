@@ -44,6 +44,7 @@ type FieldKey =
   | 'period'
   | 'intervalOnSeconds'
   | 'intervalCycleSeconds'
+  | 'scheduleTimeMinutes'
 // FieldKey is also referenced (by string-literal contract) in
 // PhaseAutomationRulesDialog.vue. Keep the union values in sync there.
 
@@ -56,6 +57,7 @@ interface Draft {
   cooldownSeconds: number
   intervalOnSeconds: number | null
   intervalCycleSeconds: number | null
+  scheduleTimeMinutes: number | null
 }
 
 const BOTH = 'BOTH' as const
@@ -128,6 +130,21 @@ const conditionGroups = [
     ],
     label: 'Duty cycle',
   },
+  {
+    items: [
+      {
+        description: 'Fire action: ON daily at a wall-clock time',
+        label: 'Schedule ON (wall-clock)',
+        value: RuleCondition.SCHEDULE_ON,
+      },
+      {
+        description: 'Fire action: OFF daily at a wall-clock time',
+        label: 'Schedule OFF (wall-clock)',
+        value: RuleCondition.SCHEDULE_OFF,
+      },
+    ],
+    label: 'Schedule',
+  },
 ]
 
 const THRESHOLD_CONDITIONS = new Set<RuleCondition>([
@@ -157,6 +174,12 @@ const isAlways = computed(
 )
 
 const isInterval = computed(() => draft.value.condition === RuleCondition.INTERVAL)
+
+const isSchedule = computed(
+  () =>
+    draft.value.condition === RuleCondition.SCHEDULE_ON ||
+    draft.value.condition === RuleCondition.SCHEDULE_OFF,
+)
 
 const isThreshold = computed(() => THRESHOLD_CONDITIONS.has(draft.value.condition))
 
@@ -199,15 +222,63 @@ const intervalPreview = computed(() => {
   return `ON ${on}s, then OFF ${off}s, repeating every ${cyc}s`
 })
 
+const HOUR_OPTIONS: { label: string; value: number }[] = Array.from({ length: 24 }, (_, h) => ({
+  label: String(h).padStart(2, '0'),
+  value: h,
+}))
+
+const MINUTE_OPTIONS: { label: string; value: number }[] = Array.from({ length: 60 }, (_, m) => ({
+  label: String(m).padStart(2, '0'),
+  value: m,
+}))
+
+const scheduleHour = computed<number | null>({
+  get: () =>
+    draft.value.scheduleTimeMinutes == null
+      ? null
+      : Math.floor(draft.value.scheduleTimeMinutes / 60),
+  set: (h) => {
+    const cur = draft.value.scheduleTimeMinutes ?? 0
+    const m = cur % 60
+    draft.value.scheduleTimeMinutes = (h ?? 0) * 60 + m
+  },
+})
+
+const scheduleMinute = computed<number | null>({
+  get: () =>
+    draft.value.scheduleTimeMinutes == null ? null : draft.value.scheduleTimeMinutes % 60,
+  set: (m) => {
+    const cur = draft.value.scheduleTimeMinutes ?? 0
+    const h = Math.floor(cur / 60)
+    draft.value.scheduleTimeMinutes = h * 60 + (m ?? 0)
+  },
+})
+
+const schedulePreview = computed(() => {
+  const v = draft.value.scheduleTimeMinutes
+  if (v == null) {
+    return null
+  }
+  const h = String(Math.floor(v / 60)).padStart(2, '0')
+  const m = String(v % 60).padStart(2, '0')
+  return `Fires daily at ${h}:${m}`
+})
+
 function emptyDraft(): Draft {
+  const cond = props.initialCondition ?? RuleCondition.ABOVE_MAX
   return {
-    action: DeviceAction.ON,
-    condition: props.initialCondition ?? RuleCondition.ABOVE_MAX,
+    action:
+      cond === RuleCondition.SCHEDULE_OFF || cond === RuleCondition.ALWAYS_OFF
+        ? DeviceAction.OFF
+        : DeviceAction.ON,
+    condition: cond,
     cooldownSeconds: 180,
     deviceId: props.devices.find((d) => d.isActive && d.type !== DeviceType.LIGHT)?.id ?? null,
     intervalCycleSeconds: props.initialCondition === RuleCondition.INTERVAL ? 300 : null,
     intervalOnSeconds: props.initialCondition === RuleCondition.INTERVAL ? 30 : null,
     period: null,
+    scheduleTimeMinutes:
+      cond === RuleCondition.SCHEDULE_ON || cond === RuleCondition.SCHEDULE_OFF ? 480 : null,
     watchedSensorType: SensorType.TEMPERATURE,
   }
 }
@@ -224,6 +295,7 @@ function hydrate() {
       intervalCycleSeconds: props.initialRule.intervalCycleSeconds,
       intervalOnSeconds: props.initialRule.intervalOnSeconds,
       period: props.initialRule.period,
+      scheduleTimeMinutes: props.initialRule.scheduleTimeMinutes,
       watchedSensorType: props.initialRule.watchedSensorType,
     }
   } else {
@@ -240,11 +312,13 @@ watch(
 watch(
   () => draft.value.condition,
   (next, prev) => {
-    // INTERVAL cleanup — runs as a separate block so the new-condition
-    // Branches also apply when transitioning away from INTERVAL.
+    // Clear fields that are invalid for the previous condition.
     if (prev === RuleCondition.INTERVAL) {
       draft.value.intervalOnSeconds = null
       draft.value.intervalCycleSeconds = null
+    }
+    if (prev === RuleCondition.SCHEDULE_ON || prev === RuleCondition.SCHEDULE_OFF) {
+      draft.value.scheduleTimeMinutes = null
     }
 
     if (next === RuleCondition.INTERVAL) {
@@ -256,6 +330,18 @@ watch(
       if (draft.value.intervalCycleSeconds == null) {
         draft.value.intervalCycleSeconds = 300
       }
+    } else if (next === RuleCondition.SCHEDULE_ON) {
+      draft.value.action = DeviceAction.ON
+      draft.value.watchedSensorType = null
+      if (draft.value.scheduleTimeMinutes == null) {
+        draft.value.scheduleTimeMinutes = 480
+      }
+    } else if (next === RuleCondition.SCHEDULE_OFF) {
+      draft.value.action = DeviceAction.OFF
+      draft.value.watchedSensorType = null
+      if (draft.value.scheduleTimeMinutes == null) {
+        draft.value.scheduleTimeMinutes = 480
+      }
     } else if (next === RuleCondition.ALWAYS_ON) {
       draft.value.action = DeviceAction.ON
       draft.value.watchedSensorType = null
@@ -265,9 +351,11 @@ watch(
     } else if (
       prev === RuleCondition.ALWAYS_ON ||
       prev === RuleCondition.ALWAYS_OFF ||
-      prev === RuleCondition.INTERVAL
+      prev === RuleCondition.INTERVAL ||
+      prev === RuleCondition.SCHEDULE_ON ||
+      prev === RuleCondition.SCHEDULE_OFF
     ) {
-      // Leaving a pin or INTERVAL for a threshold — reset sensor.
+      // Leaving a pin, INTERVAL, or schedule for a threshold — reset sensor.
       draft.value.watchedSensorType = SensorType.TEMPERATURE
     }
   },
@@ -283,11 +371,15 @@ const periodChoice = computed<PeriodChoice>({
 const actionOptionsForCondition = computed(() => {
   if (
     draft.value.condition === RuleCondition.ALWAYS_ON ||
-    draft.value.condition === RuleCondition.INTERVAL
+    draft.value.condition === RuleCondition.INTERVAL ||
+    draft.value.condition === RuleCondition.SCHEDULE_ON
   ) {
     return actionOptions.filter((o) => o.value === DeviceAction.ON)
   }
-  if (draft.value.condition === RuleCondition.ALWAYS_OFF) {
+  if (
+    draft.value.condition === RuleCondition.ALWAYS_OFF ||
+    draft.value.condition === RuleCondition.SCHEDULE_OFF
+  ) {
     return actionOptions.filter((o) => o.value === DeviceAction.OFF)
   }
   return actionOptions
@@ -357,6 +449,37 @@ function onSubmit() {
         <p v-if="intervalPreview" class="field-hint">{{ intervalPreview }}</p>
       </div>
 
+      <div v-else-if="isSchedule" class="field">
+        <label class="field-label">Fire at (HH:MM)</label>
+        <div class="time-picker">
+          <Select
+            v-model="scheduleHour"
+            :options="HOUR_OPTIONS"
+            option-label="label"
+            option-value="value"
+            placeholder="HH"
+            class="time-picker-select"
+            data-testid="schedule-hour"
+            :invalid="!!inlineErrorFor('scheduleTimeMinutes')"
+          />
+          <span class="time-picker-sep">:</span>
+          <Select
+            v-model="scheduleMinute"
+            :options="MINUTE_OPTIONS"
+            option-label="label"
+            option-value="value"
+            placeholder="MM"
+            class="time-picker-select"
+            data-testid="schedule-minute"
+            :invalid="!!inlineErrorFor('scheduleTimeMinutes')"
+          />
+        </div>
+        <p v-if="schedulePreview" class="field-hint">{{ schedulePreview }}</p>
+        <p v-if="inlineErrorFor('scheduleTimeMinutes')" class="field-error">
+          {{ inlineErrorFor('scheduleTimeMinutes') }}
+        </p>
+      </div>
+
       <div class="field" v-else-if="isThreshold">
         <label class="field-label">Watched sensor</label>
         <Select
@@ -416,11 +539,11 @@ function onSubmit() {
           :options="actionOptionsForCondition"
           option-label="label"
           option-value="value"
-          :disabled="isAlways || isInterval"
+          :disabled="isAlways || isInterval || isSchedule"
           class="full-width"
           :invalid="!!inlineErrorFor('action')"
         />
-        <p v-if="isAlways || isInterval" class="field-hint">
+        <p v-if="isAlways || isInterval || isSchedule" class="field-hint">
           Locked to {{ draft.action }} for condition {{ draft.condition }}.
         </p>
         <p v-else-if="inlineErrorFor('action')" class="field-error">
@@ -505,6 +628,21 @@ function onSubmit() {
 
 .full-width {
   width: 100%;
+}
+
+.time-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.time-picker-select {
+  width: 5rem;
+}
+
+.time-picker-sep {
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 
 .form-message {

@@ -33,6 +33,22 @@ export function formatIntervalRule(rule: AutomationRule): string {
   return `ON ${fmtDuration(on)} every ${fmtDuration(cyc)} (OFF ${fmtDuration(cyc - on)})`
 }
 
+/**
+ * Format minutes-from-midnight as a 24-hour HH:MM string.
+ * Returns "—" when the value is null or out of range.
+ */
+export function formatScheduleTime(minutes: number | null | undefined): string {
+  if (minutes == null) {
+    return '—'
+  }
+  if (!Number.isFinite(minutes) || minutes < 0 || minutes > 1439) {
+    return '—'
+  }
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 function isTempSensor(st: SensorType | null | undefined): boolean {
   return st === SensorType.TEMPERATURE || st === SensorType.TEMP_HUMIDITY
 }
@@ -72,6 +88,12 @@ export function conditionShort(rule: AutomationRule): string {
     }
     case RuleCondition.INTERVAL: {
       return formatIntervalRule(rule)
+    }
+    case RuleCondition.SCHEDULE_ON: {
+      return `ON daily at ${formatScheduleTime(rule.scheduleTimeMinutes)}`
+    }
+    case RuleCondition.SCHEDULE_OFF: {
+      return `OFF daily at ${formatScheduleTime(rule.scheduleTimeMinutes)}`
     }
     default: {
       return String(rule.condition)

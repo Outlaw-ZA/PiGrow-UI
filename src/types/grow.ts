@@ -50,6 +50,8 @@ export enum RuleCondition {
   ALWAYS_ON = 'ALWAYS_ON',
   ALWAYS_OFF = 'ALWAYS_OFF',
   INTERVAL = 'INTERVAL',
+  SCHEDULE_ON = 'SCHEDULE_ON',
+  SCHEDULE_OFF = 'SCHEDULE_OFF',
 }
 
 export enum DeviceAction {
@@ -200,6 +202,7 @@ export interface AutomationRule {
   cooldownSeconds: number
   intervalOnSeconds: number | null
   intervalCycleSeconds: number | null
+  scheduleTimeMinutes: number | null
   enabled: boolean
   lastTriggeredAt: string | null
   createdAt: string
@@ -217,6 +220,7 @@ export interface CreateAutomationRulePayload {
   cooldownSeconds?: number
   intervalOnSeconds?: number
   intervalCycleSeconds?: number
+  scheduleTimeMinutes?: number
   enabled?: boolean
 }
 
@@ -229,6 +233,7 @@ export interface UpdateAutomationRulePayload {
   cooldownSeconds?: number
   intervalOnSeconds?: number | null
   intervalCycleSeconds?: number | null
+  scheduleTimeMinutes?: number | null
   enabled?: boolean
 }
 
