@@ -372,7 +372,9 @@ const currentSecondsIntoDay = computed(() => {
 const lightTransitionCountdown = computed<{ label: string; totalSecs: number } | null>(() => {
   const idx = activePhaseIndex.value
   const phase = idx >= 0 ? sortedPhases.value[idx] : null
-  if (!phase) return null
+  if (!phase) {
+    return null
+  }
   const start = phase.dayStartMinutes ?? DEFAULT_DAY_START_MINUTES
   const duration = phase.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES
   const endMin = start + duration
@@ -385,22 +387,25 @@ const lightTransitionCountdown = computed<{ label: string; totalSecs: number } |
 
   if (activePeriod.value === 'DAY') {
     const diffSecs = endSec - curSec
-    if (diffSecs <= 0) return null
-    return { label: 'lights off in', totalSecs: diffSecs }
-  } else {
-    let diffSecs: number
-    if (curSec < startSec) {
-      diffSecs = startSec - curSec
-    } else {
-      diffSecs = startSec + MINUTES_PER_DAY * MINUTES_PER_HOUR_ENV - curSec
+    if (diffSecs <= 0) {
+      return null
     }
-    return { label: 'lights on in', totalSecs: diffSecs }
+    return { label: 'lights off in', totalSecs: diffSecs }
   }
+  let diffSecs: number
+  if (curSec < startSec) {
+    diffSecs = startSec - curSec
+  } else {
+    diffSecs = startSec + MINUTES_PER_DAY * MINUTES_PER_HOUR_ENV - curSec
+  }
+  return { label: 'lights on in', totalSecs: diffSecs }
 })
 
 const lightCountdownText = computed(() => {
   const c = lightTransitionCountdown.value
-  if (!c) return ''
+  if (!c) {
+    return ''
+  }
   const h = Math.floor(c.totalSecs / 3600)
   const m = Math.floor((c.totalSecs % 3600) / 60)
   const s = c.totalSecs % 60
@@ -417,7 +422,7 @@ const lightScheduleText = computed(() => {
   const nightH = 24 - dayH
   const onH = Math.floor(start / MINUTES_PER_HOUR_ENV)
   const onM = start % MINUTES_PER_HOUR_ENV
-  let off = start + duration
+  const off = start + duration
   const offH = Math.floor((off % MINUTES_PER_DAY) / MINUTES_PER_HOUR_ENV)
   const offM = (off % MINUTES_PER_DAY) % MINUTES_PER_HOUR_ENV
   const fmt = (h: number, m: number) =>
@@ -646,7 +651,7 @@ onMounted(async () => {
   }, 60_000)
   secondsTickHandle = setInterval(() => {
     secondsTick.value = Date.now()
-  }, 1_000)
+  }, 1000)
   if (cycleId.value) {
     const cycle = await store.fetchGrowCycle(cycleId.value)
     if (cycle?.controller) {
