@@ -473,27 +473,6 @@ function close() {
           <Button label="Close" severity="secondary" @click="close" />
           <div class="quick-add-group">
             <Button
-              label="📌 Pin ON (this phase)"
-              severity="info"
-              outlined
-              :disabled="saving"
-              @click="showAddForm(RuleCondition.ALWAYS_ON)"
-            />
-            <Button
-              label="📌 Pin OFF (this phase)"
-              severity="secondary"
-              outlined
-              :disabled="saving"
-              @click="showAddForm(RuleCondition.ALWAYS_OFF)"
-            />
-            <Button
-              label="⏱ Interval"
-              severity="info"
-              outlined
-              :disabled="saving"
-              @click="showAddForm(RuleCondition.INTERVAL)"
-            />
-            <Button
               label="Add rule"
               icon="pi pi-plus"
               severity="success"

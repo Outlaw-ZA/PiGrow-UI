@@ -338,6 +338,10 @@ watch(activePhaseIndex, () => {
 const nowTick = ref(Date.now())
 let envTickHandle: ReturnType<typeof setInterval> | null = null
 
+// Second-level ticker for the light transition countdown.
+const secondsTick = ref(Date.now())
+let secondsTickHandle: ReturnType<typeof setInterval> | null = null
+
 const currentMinutesIntoDay = computed(() => {
   // Read nowTick so this computed re-evaluates on the 60s interval.
   void nowTick.value
@@ -357,6 +361,68 @@ const activePeriod = computed<'DAY' | 'NIGHT'>(() => {
   }
   // Wrap-around (e.g. day starts 22:00, duration 12h → end = 1380, wraps to 10:00).
   return cur >= start || cur < end - MINUTES_PER_DAY ? 'DAY' : 'NIGHT'
+})
+
+const currentSecondsIntoDay = computed(() => {
+  void secondsTick.value
+  const now = new Date()
+  return now.getHours() * MINUTES_PER_HOUR_ENV * 60 + now.getMinutes() * 60 + now.getSeconds()
+})
+
+const lightTransitionCountdown = computed<{ label: string; totalSecs: number } | null>(() => {
+  const idx = activePhaseIndex.value
+  const phase = idx >= 0 ? sortedPhases.value[idx] : null
+  if (!phase) return null
+  const start = phase.dayStartMinutes ?? DEFAULT_DAY_START_MINUTES
+  const duration = phase.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES
+  const endMin = start + duration
+  const curSec = currentSecondsIntoDay.value
+  const startSec = start * MINUTES_PER_HOUR_ENV
+  let endSec = (endMin % MINUTES_PER_DAY) * MINUTES_PER_HOUR_ENV
+  if (endSec === 0 && endMin > 0) {
+    endSec = MINUTES_PER_DAY * MINUTES_PER_HOUR_ENV
+  }
+
+  if (activePeriod.value === 'DAY') {
+    const diffSecs = endSec - curSec
+    if (diffSecs <= 0) return null
+    return { label: 'lights off in', totalSecs: diffSecs }
+  } else {
+    let diffSecs: number
+    if (curSec < startSec) {
+      diffSecs = startSec - curSec
+    } else {
+      diffSecs = startSec + MINUTES_PER_DAY * MINUTES_PER_HOUR_ENV - curSec
+    }
+    return { label: 'lights on in', totalSecs: diffSecs }
+  }
+})
+
+const lightCountdownText = computed(() => {
+  const c = lightTransitionCountdown.value
+  if (!c) return ''
+  const h = Math.floor(c.totalSecs / 3600)
+  const m = Math.floor((c.totalSecs % 3600) / 60)
+  const s = c.totalSecs % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${c.label} ${h > 0 ? `${h}h ` : ''}${m}m ${s}s`
+})
+
+const lightScheduleText = computed(() => {
+  const idx = activePhaseIndex.value
+  const phase = idx >= 0 ? sortedPhases.value[idx] : null
+  const start = phase?.dayStartMinutes ?? DEFAULT_DAY_START_MINUTES
+  const duration = phase?.dayDurationMinutes ?? DEFAULT_DAY_DURATION_MINUTES
+  const dayH = Math.round(duration / MINUTES_PER_HOUR_ENV)
+  const nightH = 24 - dayH
+  const onH = Math.floor(start / MINUTES_PER_HOUR_ENV)
+  const onM = start % MINUTES_PER_HOUR_ENV
+  let off = start + duration
+  const offH = Math.floor((off % MINUTES_PER_DAY) / MINUTES_PER_HOUR_ENV)
+  const offM = (off % MINUTES_PER_DAY) % MINUTES_PER_HOUR_ENV
+  const fmt = (h: number, m: number) =>
+    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  return `${fmt(onH, onM)} → ${fmt(offH, offM)} (${dayH}h day / ${nightH}h night)`
 })
 
 const activeEnvConfigured = computed(
@@ -578,6 +644,9 @@ onMounted(async () => {
   envTickHandle = setInterval(() => {
     nowTick.value = Date.now()
   }, 60_000)
+  secondsTickHandle = setInterval(() => {
+    secondsTick.value = Date.now()
+  }, 1_000)
   if (cycleId.value) {
     const cycle = await store.fetchGrowCycle(cycleId.value)
     if (cycle?.controller) {
@@ -601,6 +670,10 @@ onUnmounted(() => {
   if (envTickHandle) {
     clearInterval(envTickHandle)
     envTickHandle = null
+  }
+  if (secondsTickHandle) {
+    clearInterval(secondsTickHandle)
+    secondsTickHandle = null
   }
 })
 
@@ -828,6 +901,17 @@ function statusSeverity(status?: string) {
             rounded
             v-tooltip.top="'Currently active day/night period'"
           />
+          <span
+            v-if="activePhaseIndex >= 0"
+            class="light-schedule"
+            v-tooltip.top="'Light cycle for this phase'"
+          >
+            <i class="pi pi-sun light-schedule-icon"></i>
+            {{ lightScheduleText }}
+          </span>
+          <span v-if="lightTransitionCountdown" class="light-countdown">
+            {{ lightCountdownText }}
+          </span>
         </div>
       </template>
       <template #content>
@@ -1391,6 +1475,29 @@ function statusSeverity(status?: string) {
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+.light-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.light-schedule-icon {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.light-countdown {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
 .env-loading {
