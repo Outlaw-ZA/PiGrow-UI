@@ -121,7 +121,7 @@ function connectDeviceSocket() {
   }
   const { origin } = new URL(API_BASE)
   deviceCommandSocket = io(origin, {
-    ackTimeout: 10000,
+    ackTimeout: 10_000,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,

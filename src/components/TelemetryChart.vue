@@ -77,15 +77,15 @@ const chartData = computed(() => {
   return {
     datasets: [
       {
-        label: config?.label ?? selectedType.value,
-        data: data.map((d) => d.value),
-        borderColor: config?.color ?? 'rgb(75, 192, 192)',
         backgroundColor: `${config?.color?.replace('rgb', 'rgba').replace(')', ', 0.1)') ?? 'rgba(75, 192, 192, 0.1)'}`,
-        fill: true,
-        tension: 0.3,
-        pointRadius: 0,
-        pointHitRadius: 8,
+        borderColor: config?.color ?? 'rgb(75, 192, 192)',
         borderWidth: 2,
+        data: data.map((d) => d.value),
+        fill: true,
+        label: config?.label ?? selectedType.value,
+        pointHitRadius: 8,
+        pointRadius: 0,
+        tension: 0.3,
       },
     ],
     labels: data.map((d) => new Date(d.createdAt).toLocaleTimeString()),
