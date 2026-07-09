@@ -3,7 +3,12 @@ import { computed, onMounted, onUnmounted, reactive, ref, useTemplateRef, watch 
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
 import type { Device, GrowPhase, PhaseEnvironment } from '../types/grow'
-import { DayNightPeriod } from '../types/grow'
+import { DayNightPeriod, SensorType } from '../types/grow'
+import { io } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
+import { useLiveTelemetry } from '../composables/useLiveTelemetry'
+import TelemetryChart from '../components/TelemetryChart.vue'
+import { API_BASE } from '../stores/apiBase'
 import {
   addDays,
   daysBetween,
@@ -103,6 +108,37 @@ const elapsedDays = computed(() => {
 })
 
 const deviceToggles = reactive<Record<string, boolean>>({})
+
+// Socket.IO connection for device commands
+let deviceCommandSocket: Socket | null = null
+
+function connectDeviceSocket() {
+  if (deviceCommandSocket) {
+    if (!deviceCommandSocket.connected) {
+      // Socket exists but disconnected — let reconnection handle it
+    }
+    return
+  }
+  const { origin } = new URL(API_BASE)
+  deviceCommandSocket = io(origin, {
+    ackTimeout: 10000,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    transports: ['websocket', 'polling'],
+  })
+  deviceCommandSocket.on('connect_error', () => {
+    console.warn('Device command socket connection failed, falling back to REST')
+  })
+}
+
+function disconnectDeviceSocket() {
+  if (deviceCommandSocket) {
+    deviceCommandSocket.removeAllListeners()
+    deviceCommandSocket.disconnect()
+    deviceCommandSocket = null
+  }
+}
 
 const confirm = useConfirm()
 const phaseMenu = useTemplateRef<InstanceType<typeof Menu>>('phaseMenu')
@@ -291,12 +327,15 @@ const activePhaseElapsedDays = computed(() => {
   return Math.min(daysBetween(phase.startAt, todayStr()), phase.durationDays)
 })
 
-// TODO: replace with live telemetry from the backend once the API is ready
-const temperatureC = ref(24.5)
-const humidityPercent = ref(58)
-const co2Ppm = ref(1000)
-const ecMs = ref(800)
-const phValue = ref(6)
+// ---------- Live telemetry via Socket.IO ----------
+
+const liveTelemetry = useLiveTelemetry(() => cycleId.value)
+
+const temperatureC = computed(() => liveTelemetry.getLatest(SensorType.TEMPERATURE)?.value ?? 0)
+const humidityPercent = computed(() => liveTelemetry.getLatest(SensorType.HUMIDITY)?.value ?? 0)
+const co2Ppm = computed(() => liveTelemetry.getLatest(SensorType.CO2)?.value ?? 0)
+const ecMs = computed(() => liveTelemetry.getLatest(SensorType.EC)?.value ?? 0)
+const phValue = computed(() => liveTelemetry.getLatest(SensorType.PH)?.value ?? 0)
 
 // ---------- Active phase environment (Day/Night targets) ----------
 
@@ -463,9 +502,9 @@ const automations = useAutomationMonitor({
   },
   getDevices: () => growDevices.value,
   getReadings: () => ({
-    co2: co2Ppm.value,
-    humidity: humidityPercent.value,
-    temperature: temperatureC.value,
+    co2: liveTelemetry.getLatest(SensorType.CO2)?.value ?? 0,
+    humidity: liveTelemetry.getLatest(SensorType.HUMIDITY)?.value ?? 0,
+    temperature: liveTelemetry.getLatest(SensorType.TEMPERATURE)?.value ?? 0,
   }),
   toggleRuleApi: (id) => store.toggleRule(id),
 })
@@ -556,14 +595,35 @@ watch(
   { deep: true, immediate: true },
 )
 
-async function onToggle(deviceId: string, checked: boolean) {
+async function onToggle(deviceId: string, checked: boolean, pin: number) {
   deviceToggles[deviceId] = checked
+  const action = checked ? 'ON' : 'OFF'
+
+  if (deviceCommandSocket?.connected) {
+    deviceCommandSocket.emit(
+      'ui_command',
+      { action, deviceId, pin },
+      (ack: { ok: boolean } | null) => {
+        if (!ack?.ok) {
+          deviceToggles[deviceId] = !checked
+          toast.add({
+            detail: 'Device command was not acknowledged',
+            life: 5000,
+            severity: 'error',
+            summary: 'Command failed',
+          })
+        }
+      },
+    )
+    return
+  }
+  // Fall back to REST
   const controllerId = linkedController.value?.id
   if (!controllerId) {
     return
   }
   try {
-    await store.sendDeviceCommand(deviceId, controllerId, checked ? 'ON' : 'OFF')
+    await store.sendDeviceCommand(deviceId, controllerId, action)
   } catch (error) {
     deviceToggles[deviceId] = !checked
     const { message, status } = extractApiError(error, 'Device command failed')
@@ -664,10 +724,13 @@ onMounted(async () => {
     }
     if (cycle?.controllerId) {
       await store.fetchDevices(cycle.controllerId)
+      store.pollDevices(cycle.controllerId)
+      connectDeviceSocket()
     }
     await reconcileGrowState(cycle)
     await loadActivePhaseEnv()
     await automations.reload()
+    liveTelemetry.start()
   }
 })
 
@@ -680,6 +743,8 @@ onUnmounted(() => {
     clearInterval(secondsTickHandle)
     secondsTickHandle = null
   }
+  store.stopDevicePolling()
+  disconnectDeviceSocket()
 })
 
 function statusSeverity(status?: string) {
@@ -760,55 +825,81 @@ function statusSeverity(status?: string) {
     </Card>
 
     <Card>
-      <template #title>Climate</template>
+      <template #title>
+        <div class="section-title-row">
+          <span>Climate</span>
+          <span
+            v-if="liveTelemetry.connected"
+            class="socket-badge socket-badge--live"
+            v-tooltip.top="'Receiving live telemetry'"
+          >
+            <i class="pi pi-circle-on"></i> Live
+          </span>
+          <span
+            v-else
+            class="socket-badge socket-badge--offline"
+            v-tooltip.top="'No telemetry connection'"
+          >
+            <i class="pi pi-circle-off"></i> Offline
+          </span>
+        </div>
+      </template>
       <template #content>
         <div class="climate-grid">
-          <div class="hero-metric" v-tooltip.top="'Live telemetry — hardcoded for now'">
+          <div class="hero-metric" v-tooltip.top="'Temperature sensor'">
             <i class="pi pi-sun hero-metric-icon"></i>
             <div class="hero-metric-info">
               <span class="hero-metric-value">
-                {{ temperatureC }}<span class="hero-metric-unit">°C</span>
+                {{ temperatureC.toFixed(1) }}<span class="hero-metric-unit">°C</span>
               </span>
               <span class="hero-metric-label">Temperature</span>
             </div>
           </div>
-          <div class="hero-metric" v-tooltip.top="'Live telemetry — hardcoded for now'">
+          <div class="hero-metric" v-tooltip.top="'Humidity sensor'">
             <i class="pi pi-cloud hero-metric-icon"></i>
             <div class="hero-metric-info">
               <span class="hero-metric-value">
-                {{ humidityPercent }}<span class="hero-metric-unit">%</span>
+                {{ humidityPercent.toFixed(0) }}<span class="hero-metric-unit">%</span>
               </span>
               <span class="hero-metric-label">Humidity</span>
             </div>
           </div>
-          <div class="hero-metric" v-tooltip.top="'Live telemetry — hardcoded for now'">
+          <div class="hero-metric" v-tooltip.top="'CO₂ sensor'">
             <i class="pi pi-globe hero-metric-icon"></i>
             <div class="hero-metric-info">
               <span class="hero-metric-value">
-                {{ co2Ppm }}<span class="hero-metric-unit">ppm</span>
+                {{ co2Ppm.toFixed(0) }}<span class="hero-metric-unit">ppm</span>
               </span>
               <span class="hero-metric-label">CO₂</span>
             </div>
           </div>
-          <div class="hero-metric" v-tooltip.top="'Live telemetry — hardcoded for now'">
+          <div class="hero-metric" v-tooltip.top="'EC sensor'">
             <i class="pi pi-bolt hero-metric-icon"></i>
             <div class="hero-metric-info">
               <span class="hero-metric-value">
-                {{ ecMs }}<span class="hero-metric-unit">ppm</span>
+                {{ ecMs.toFixed(0) }}<span class="hero-metric-unit">µS/cm</span>
               </span>
               <span class="hero-metric-label">Water EC</span>
             </div>
           </div>
-          <div class="hero-metric" v-tooltip.top="'Live telemetry — hardcoded for now'">
+          <div class="hero-metric" v-tooltip.top="'pH sensor'">
             <i class="pi pi-chart-line hero-metric-icon"></i>
             <div class="hero-metric-info">
               <span class="hero-metric-value">
-                {{ phValue }}<span class="hero-metric-unit">pH</span>
+                {{ phValue.toFixed(1) }}<span class="hero-metric-unit">pH</span>
               </span>
               <span class="hero-metric-label">Water pH</span>
             </div>
           </div>
         </div>
+      </template>
+    </Card>
+
+    <Card>
+      <template #title>Telemetry History</template>
+      <template #content>
+        <TelemetryChart v-if="cycleId" :growCycleId="cycleId" />
+        <div v-else class="empty-state">No grow cycle selected.</div>
       </template>
     </Card>
 
@@ -825,7 +916,7 @@ function statusSeverity(status?: string) {
             <span class="device-name">{{ device.name }}</span>
             <ToggleSwitch
               :modelValue="deviceToggles[device.id!]"
-              @update:modelValue="(val: boolean) => onToggle(device.id!, val)"
+              @update:modelValue="(val: boolean) => onToggle(device.id!, val, device.pinNumber)"
             />
           </div>
         </div>
@@ -2097,5 +2188,35 @@ function statusSeverity(status?: string) {
   font-size: var(--text-sm);
   cursor: help;
   flex: 0 0 auto;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.socket-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+}
+
+.socket-badge--live {
+  color: var(--color-success);
+}
+
+.socket-badge--offline {
+  color: var(--color-text-muted);
+}
+
+.socket-badge i {
+  font-size: 0.5rem;
 }
 </style>

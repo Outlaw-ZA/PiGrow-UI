@@ -240,9 +240,36 @@ export interface UpdateAutomationRulePayload {
 export interface Telemetry {
   id: string
   growCycleId: string
-  sensorType: string
+  sensorId: string
+  sensorType: SensorType
   value: number
   createdAt: string
+  sensor?: {
+    id: string
+    name: string
+    type: SensorType
+    protocol: SensorProtocol
+  }
+}
+
+export interface FrontendTelemetry {
+  sensorId: string
+  sensorName: string
+  sensorType: SensorType
+  value: number
+  growCycleId: string
+  timestamp: string
+}
+
+export interface UICommand {
+  deviceId: string
+  action: 'ON' | 'OFF'
+  pin: number
+}
+
+export interface TelemetryFilterParams {
+  from: string
+  to: string
 }
 
 export interface DeviceStateLog {

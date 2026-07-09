@@ -99,14 +99,36 @@ export const useDeviceStore = defineStore('device', () => {
     updateDeviceInCache(controllerId, { id: deviceId, isActive: action === 'ON' })
   }
 
+  let pollingTimer: ReturnType<typeof setInterval> | null = null
+
+  function pollDevices(controllerId: string, intervalMs = 5000) {
+    stopDevicePolling()
+    pollingTimer = setInterval(async () => {
+      try {
+        await fetchDevices(controllerId)
+      } catch {
+        // Polling errors are non-critical
+      }
+    }, intervalMs)
+  }
+
+  function stopDevicePolling() {
+    if (pollingTimer) {
+      clearInterval(pollingTimer)
+      pollingTimer = null
+    }
+  }
+
   return {
     createDevice,
     createDevicesBatch,
     deleteDevice,
     fetchDevices,
     findDeviceOnController,
+    pollDevices,
     removeDeviceFromCache,
     sendDeviceCommand,
+    stopDevicePolling,
     updateDevice,
     updateDeviceInCache,
   }
