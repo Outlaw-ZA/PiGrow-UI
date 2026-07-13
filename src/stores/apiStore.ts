@@ -50,6 +50,7 @@ export const useApiStore = defineStore('api', () => {
     endGrow: growCycleStore.endGrow,
     fetchAll,
     fetchController: controllerStore.fetchController,
+    fetchDeviceStateLogs: deviceStore.fetchDeviceStateLogs,
     fetchDevices: deviceStore.fetchDevices,
     fetchGrowCycle: growCycleStore.fetchGrowCycle,
     fetchLatestTelemetry: telemetryStore.fetchLatestTelemetry,

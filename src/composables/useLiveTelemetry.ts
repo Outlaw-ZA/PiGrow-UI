@@ -1,4 +1,4 @@
-import { onUnmounted, reactive, ref } from 'vue'
+import { onUnmounted, reactive, ref, shallowRef } from 'vue'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import type { FrontendTelemetry, SensorType } from '../types/grow'
@@ -15,7 +15,7 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
   const connected = ref(false)
 
   let pollingHandle: ReturnType<typeof setInterval> | null = null
-  let socket: Socket | null = null
+  const socket = shallowRef<Socket | null>(null)
   let isStarted = false
 
   function pushReading(data: FrontendTelemetry) {
@@ -66,28 +66,28 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
     error.value = null
 
     const { origin } = new URL(API_BASE)
-    socket = io(origin, {
+    socket.value = io(origin, {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       transports: ['websocket', 'polling'],
     })
 
-    socket.on('connect', () => {
+    socket.value.on('connect', () => {
       loading.value = false
       connected.value = true
     })
 
-    socket.on('connect_error', () => {
+    socket.value.on('connect_error', () => {
       loading.value = false
       error.value = 'Socket connection failed'
     })
 
-    socket.on('disconnect', () => {
+    socket.value.on('disconnect', () => {
       connected.value = false
     })
 
-    socket.on('frontend_telemetry', (data: FrontendTelemetry) => {
+    socket.value.on('frontend_telemetry', (data: FrontendTelemetry) => {
       const currentId = getCycleId()
       if (currentId && data.growCycleId === currentId) {
         pushReading(data)
@@ -104,10 +104,10 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
 
   function stop() {
     isStarted = false
-    if (socket) {
-      socket.removeAllListeners()
-      socket.disconnect()
-      socket = null
+    if (socket.value) {
+      socket.value.removeAllListeners()
+      socket.value.disconnect()
+      socket.value = null
     }
     if (pollingHandle) {
       clearInterval(pollingHandle)
@@ -128,6 +128,7 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
     latest,
     loading,
     pushReading,
+    socket,
     start,
     stop,
   }

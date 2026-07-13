@@ -39,12 +39,10 @@ export function formatSensorProtocol(protocol: SensorProtocol): string {
 export function defaultSensorForm(): {
   name: string
   type: SensorType
-  mqttTopic: string
   pinNumbers: number[]
   protocol: SensorProtocol
 } {
   return {
-    mqttTopic: '',
     name: '',
     pinNumbers: [],
     protocol: SensorProtocol.I2C,

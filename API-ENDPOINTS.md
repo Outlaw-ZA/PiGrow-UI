@@ -44,17 +44,17 @@ type SensorProtocol = 'I2C' | 'SPI' | 'UART' | 'RS485'
 
 ## Devices
 
-| Method   | Endpoint                               | FE Scenario                                                  |
-| -------- | -------------------------------------- | ------------------------------------------------------------ |
-| `GET`    | `/api/devices/grow-cycle/:growCycleId` | GrowFormView (edit) device list, GrowMonitorView device card |
-| `GET`    | `/api/devices/:id`                     | Device detail (with configs + grow info)                     |
-| `POST`   | `/api/devices`                         | GrowFormView add device (to an existing grow)                |
-| `POST`   | `/api/devices/batch`                   | Bulk add devices to a grow                                   |
-| `PUT`    | `/api/devices/:id`                     | Edit device                                                  |
-| `DELETE` | `/api/devices/:id`                     | Remove device                                                |
-| `POST`   | `/api/devices/:id/command`             | GrowMonitorView toggle switches (ON/OFF)                     |
+| Method   | Endpoint                                | FE Scenario                                                 |
+| -------- | --------------------------------------- | ----------------------------------------------------------- |
+| `GET`    | `/api/devices/controller/:controllerId` | ControllerFormView device list, GrowMonitorView device card |
+| `GET`    | `/api/devices/:id`                      | Device detail (with controller summary)                     |
+| `POST`   | `/api/devices`                          | ControllerFormView add device (to an existing controller)   |
+| `POST`   | `/api/devices/batch`                    | Bulk add devices to a controller                            |
+| `PUT`    | `/api/devices/:id`                      | Edit device                                                 |
+| `DELETE` | `/api/devices/:id`                      | Remove device                                               |
+| `POST`   | `/api/devices/:id/command`              | GrowMonitorView toggle switches (ON/OFF)                    |
 
-Devices are scoped to a grow cycle. The initial provisioning happens in the grow-create payload (see below). Add/edit/remove afterwards targets a specific grow via `growCycleId`.
+Devices are scoped to a **Controller** (persistent GPIO inventory), not a grow cycle. They are physical relays/actuators wired to the Pi and shared across the controller's lifetime. The initial provisioning happens via `POST /api/devices` or `POST /api/devices/batch` targeting a controller. Add/edit/remove afterwards targets a specific device by ID.
 
 ---
 
@@ -63,8 +63,8 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 | Method   | Endpoint                          | FE Scenario                                                                                                                                          |
 | -------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/grow-cycles`                | HomeView cards, AdminView list (includes basic controller info)                                                                                      |
-| `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases, devices nested)                                                                                     |
-| `POST`   | `/api/grow-cycles`                | GrowFormView create (provisions grow + devices; phases are created separately via `/api/grow-phases`)                                                |
+| `GET`    | `/api/grow-cycles/:id`            | GrowMonitorView full detail (controller, phases with environments nested — devices are NOT nested here)                                              |
+| `POST`   | `/api/grow-cycles`                | GrowFormView create (provisions grow only; phases created separately via `/api/grow-phases`, devices via `/api/devices`)                             |
 | `PUT`    | `/api/grow-cycles/:id`            | GrowFormView edit (name, isActive, startAt as YYYY-MM-DD — `controllerId` is **not** accepted)                                                       |
 | `DELETE` | `/api/grow-cycles/:id`            | AdminView delete (cascades to phases, devices, and telemetry)                                                                                        |
 | `POST`   | `/api/grow-cycles/:id/skip-phase` | GrowMonitorView skip active phase (atomic: trims duration + cascades dates + activates next phase). Optional `?today=YYYY-MM-DD` query.              |
@@ -98,12 +98,12 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 
 ## Socket.IO Events (Real-time)
 
-| Event               | Direction   | Payload                                         | FE Scenario                       |
-| ------------------- | ----------- | ----------------------------------------------- | --------------------------------- |
-| `device:command`    | FE → Server | `{ deviceId, action: "ON"\|"OFF" }`             | GrowMonitorView toggle switches   |
-| `device:status`     | Server → FE | `{ deviceId, isActive, timestamp }`             | Reflect device state changes      |
-| `telemetry:update`  | Server → FE | `{ growCycleId, sensorType, value, timestamp }` | Real-time sensor dashboard        |
-| `controller:status` | Server → FE | `{ controllerId, status, timestamp }`           | Online/offline alerts in HomeView |
+| Event                | Direction   | Payload                                                               | FE Scenario                     |
+| -------------------- | ----------- | --------------------------------------------------------------------- | ------------------------------- |
+| `ui_command`         | FE → Server | `{ deviceId: string, action: "ON"\|"OFF", pin: number }`              | GrowMonitorView toggle switches |
+| `frontend_telemetry` | Server → FE | `{ growCycleId, sensorId, sensorName, sensorType, timestamp, value }` | Real-time sensor dashboard      |
+
+> **Note:** The server does NOT emit `device:status` or `controller:status` via Socket.IO. Device state is handled via MQTT topic `devices/<id>/state`. Controller status is updated via `PATCH /api/controllers/:id/heartbeat`.
 
 ---
 
@@ -116,9 +116,7 @@ Devices are scoped to a grow cycle. The initial provisioning happens in the grow
 
 ### Grow Cycle Creation
 
-`POST /api/grow-cycles` accepts `{ name, controllerId, isActive?, devices: [...] }` and **atomically** provisions: grow cycle + per-grow devices. **No phases are created automatically** — create phases explicitly via `POST /api/grow-phases`. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
-
-Each device in the `devices` array: `{ name, type, pinNumber (0–40), mqttTopic, isActive? (default true) }`.
+`POST /api/grow-cycles` accepts `{ name, controllerId, isActive? }`. **No phases are created automatically** — create phases explicitly via `POST /api/grow-phases`. **Devices are NOT created here** — they belong to the controller and are provisioned separately via `POST /api/devices` or `POST /api/devices/batch`. The cycle-level `startAt` is **not** accepted on create — a new cycle always has `startAt: null` until set via `PUT /api/grow-cycles/:id` with `{ startAt: "YYYY-MM-DD" }`. Full ISO date-time values for `startAt` are rejected (`400`).
 
 If `isActive: true` is sent but the controller already has an active grow, the response is `409 Conflict`:
 
@@ -142,5 +140,5 @@ All errors return `{ error: string }` with appropriate HTTP status (400 for vali
 
 - **List endpoints** (`GET /api/grow-cycles`, `/api/controllers`) — flat with only `controller: { name, status }` included
 - **Detail endpoints**:
-  - `GET /api/grow-cycles/:id` — full nested: `controller`, `devices[]`, `phases[]` (phases carry no device-config children)
-  - `GET /api/controllers/:id` — `growCycles` (only active cycles) with each cycle's `phases` (only active phase) + `devices[]` nested. No top-level `devices` on the controller.
+  - `GET /api/grow-cycles/:id` — full nested: `controller`, `phases[]` (each with `environments[]`). Devices are NOT nested — they are owned by the controller.
+  - `GET /api/controllers/:id` — `devices[]` (persistent GPIO inventory), `growCycles` (only active cycles) with each cycle's `phases` (only active phase) nested, and `sensors[]`.

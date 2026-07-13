@@ -125,7 +125,6 @@ function openAddSensor() {
 
 function openEditSensor(sensor: Sensor | StagedSensor) {
   sensorForm.value = {
-    mqttTopic: sensor.mqttTopic,
     name: sensor.name,
     pinNumbers: [...sensor.pinNumbers],
     protocol: sensor.protocol,
@@ -153,7 +152,6 @@ async function saveSensor() {
     return
   }
   const payload: SensorSeed = {
-    mqttTopic: sensorForm.value.mqttTopic,
     name: sensorForm.value.name.trim(),
     pinNumbers: [...sensorForm.value.pinNumbers].toSorted((a, b) => a - b),
     protocol: sensorForm.value.protocol,
@@ -261,7 +259,6 @@ const editingDeviceIsLive = ref(false)
 const deviceForm = ref({
   automationMode: AutomationMode.MANUAL,
   isActive: true,
-  mqttTopic: '',
   name: '',
   pinNumber: '',
   type: DeviceType.LIGHT,
@@ -318,7 +315,6 @@ function openAddDevice() {
   deviceForm.value = {
     automationMode: AutomationMode.MANUAL,
     isActive: true,
-    mqttTopic: '',
     name: '',
     pinNumber: '',
     type: DeviceType.LIGHT,
@@ -333,7 +329,6 @@ function openEditDevice(device: Device | StagedDevice) {
   deviceForm.value = {
     automationMode: device.automationMode ?? AutomationMode.MANUAL,
     isActive: device.isActive ?? true,
-    mqttTopic: device.mqttTopic,
     name: device.name,
     pinNumber: String(device.pinNumber),
     type: device.type,
@@ -362,7 +357,6 @@ async function saveDevice() {
   const payload: DeviceSeed = {
     automationMode: deviceForm.value.automationMode,
     isActive: deviceForm.value.isActive,
-    mqttTopic: deviceForm.value.mqttTopic,
     name: deviceForm.value.name.trim(),
     pinNumber: Number(deviceForm.value.pinNumber),
     type: deviceForm.value.type,
@@ -482,7 +476,6 @@ async function handleSave() {
   }
   if (stagedSensors.value.length > 0) {
     payload.sensors = stagedSensors.value.map((s) => ({
-      mqttTopic: s.mqttTopic,
       name: s.name,
       pinNumbers: s.pinNumbers,
       protocol: s.protocol,
@@ -499,7 +492,6 @@ async function handleSave() {
           stagedDevices.value.map((d) => ({
             automationMode: d.automationMode,
             isActive: d.isActive,
-            mqttTopic: d.mqttTopic,
             name: d.name,
             pinNumber: d.pinNumber,
             type: d.type,
@@ -643,14 +635,6 @@ async function handleSave() {
                       </div>
                     </template>
                   </Column>
-                  <Column header="MQTT Topic">
-                    <template #body="slotProps">
-                      <code v-if="slotProps.data.mqttTopic" class="meta-code">
-                        {{ slotProps.data.mqttTopic }}
-                      </code>
-                      <span v-else class="muted">—</span>
-                    </template>
-                  </Column>
                   <Column v-if="isEditMode" header="Last Active">
                     <template #body="slotProps">
                       <span v-if="slotProps.data.lastActive" class="meta-code">
@@ -740,14 +724,6 @@ async function handleSave() {
                   <Column field="pinNumber" header="GPIO Pin" sortable>
                     <template #body="slotProps">
                       <code class="meta-code">{{ slotProps.data.pinNumber }}</code>
-                    </template>
-                  </Column>
-                  <Column field="mqttTopic" header="MQTT Topic" sortable>
-                    <template #body="slotProps">
-                      <code v-if="slotProps.data.mqttTopic" class="meta-code">
-                        {{ slotProps.data.mqttTopic }}
-                      </code>
-                      <span v-else class="muted">—</span>
                     </template>
                   </Column>
                   <Column header="Mode" sortable>
@@ -856,16 +832,6 @@ async function handleSave() {
               class="full-width"
             />
           </div>
-        </div>
-
-        <div class="field">
-          <label for="sensor-mqtt" class="field-label">MQTT Topic</label>
-          <InputText
-            id="sensor-mqtt"
-            v-model="sensorForm.mqttTopic"
-            placeholder="tent1/sensors/climate/state"
-            class="full-width"
-          />
         </div>
 
         <div class="field">
@@ -1048,16 +1014,6 @@ async function handleSave() {
             </AccordionContent>
           </AccordionPanel>
         </Accordion>
-
-        <div class="field">
-          <label for="dev-topic" class="field-label">MQTT Topic</label>
-          <InputText
-            id="dev-topic"
-            v-model="deviceForm.mqttTopic"
-            placeholder="tent1/device/light/cmd"
-            class="full-width"
-          />
-        </div>
       </div>
 
       <template #footer>

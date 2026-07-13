@@ -4,11 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
 import type { Device, GrowPhase, PhaseEnvironment } from '../types/grow'
 import { DayNightPeriod, SensorType } from '../types/grow'
-import { io } from 'socket.io-client'
-import type { Socket } from 'socket.io-client'
 import { useLiveTelemetry } from '../composables/useLiveTelemetry'
 import TelemetryChart from '../components/TelemetryChart.vue'
-import { API_BASE } from '../stores/apiBase'
+import DeviceHistoryChart from '../components/DeviceHistoryChart.vue'
 import {
   addDays,
   daysBetween,
@@ -109,35 +107,26 @@ const elapsedDays = computed(() => {
 
 const deviceToggles = reactive<Record<string, boolean>>({})
 
-// Socket.IO connection for device commands
-let deviceCommandSocket: Socket | null = null
+const TIME_PRESETS = [
+  { label: '1h', seconds: 3600 },
+  { label: '6h', seconds: 21_600 },
+  { label: '24h', seconds: 86_400 },
+  { label: '7d', seconds: 604_800 },
+] as const
 
+const deviceHistoryRange = ref(86_400)
+
+// Socket.IO connection for device commands — reuse the telemetry socket
 function connectDeviceSocket() {
-  if (deviceCommandSocket) {
-    if (!deviceCommandSocket.connected) {
-      // Socket exists but disconnected — let reconnection handle it
-    }
-    return
-  }
-  const { origin } = new URL(API_BASE)
-  deviceCommandSocket = io(origin, {
-    ackTimeout: 10_000,
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    transports: ['websocket', 'polling'],
-  })
-  deviceCommandSocket.on('connect_error', () => {
-    console.warn('Device command socket connection failed, falling back to REST')
-  })
+  // Socket is managed by useLiveTelemetry; we just use it via liveTelemetry.socket
+}
+
+function handleDeviceStateUpdate(data: { deviceId: string; isActive: boolean }) {
+  deviceToggles[data.deviceId] = data.isActive
 }
 
 function disconnectDeviceSocket() {
-  if (deviceCommandSocket) {
-    deviceCommandSocket.removeAllListeners()
-    deviceCommandSocket.disconnect()
-    deviceCommandSocket = null
-  }
+  // Socket lifecycle is managed by useLiveTelemetry
 }
 
 const confirm = useConfirm()
@@ -599,22 +588,19 @@ async function onToggle(deviceId: string, checked: boolean, pin: number) {
   deviceToggles[deviceId] = checked
   const action = checked ? 'ON' : 'OFF'
 
-  if (deviceCommandSocket?.connected) {
-    deviceCommandSocket.emit(
-      'ui_command',
-      { action, deviceId, pin },
-      (ack: { ok: boolean } | null) => {
-        if (!ack?.ok) {
-          deviceToggles[deviceId] = !checked
-          toast.add({
-            detail: 'Device command was not acknowledged',
-            life: 5000,
-            severity: 'error',
-            summary: 'Command failed',
-          })
-        }
-      },
-    )
+  const sock = liveTelemetry.socket.value
+  if (sock?.connected) {
+    sock.emit('ui_command', { action, deviceId, pin }, (ack: { ok: boolean } | null) => {
+      if (!ack?.ok) {
+        deviceToggles[deviceId] = !checked
+        toast.add({
+          detail: 'Device command was not acknowledged',
+          life: 5000,
+          severity: 'error',
+          summary: 'Command failed',
+        })
+      }
+    })
     return
   }
   // Fall back to REST
@@ -731,6 +717,12 @@ onMounted(async () => {
     await loadActivePhaseEnv()
     await automations.reload()
     liveTelemetry.start()
+
+    // Listen for real-time device state updates from the backend.
+    const sock = liveTelemetry.socket.value
+    if (sock) {
+      sock.on('device_state_update', handleDeviceStateUpdate)
+    }
   }
 })
 
@@ -745,6 +737,10 @@ onUnmounted(() => {
   }
   store.stopDevicePolling()
   disconnectDeviceSocket()
+  const sock = liveTelemetry.socket.value
+  if (sock) {
+    sock.off('device_state_update', handleDeviceStateUpdate)
+  }
 })
 
 function statusSeverity(status?: string) {
@@ -921,6 +917,41 @@ function statusSeverity(status?: string) {
           </div>
         </div>
         <div v-else class="empty-state">No devices configured for this grow cycle.</div>
+      </template>
+    </Card>
+
+    <Card>
+      <template #title>Device History</template>
+      <template #content>
+        <div v-if="growDevices.length" class="device-history-section">
+          <div class="chart-controls">
+            <div class="chart-controls-group">
+              <label class="chart-label">Range</label>
+              <div class="chart-chip-group">
+                <button
+                  v-for="p in TIME_PRESETS"
+                  :key="p.seconds"
+                  class="chart-chip"
+                  :class="{ 'chart-chip--active': deviceHistoryRange === p.seconds }"
+                  @click="deviceHistoryRange = p.seconds"
+                >
+                  {{ p.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="device-history-grid">
+            <div v-for="device in growDevices" :key="device.id" class="device-history-cell">
+              <span class="device-history-name">{{ device.name }}</span>
+              <DeviceHistoryChart
+                :deviceId="device.id!"
+                :deviceName="device.name"
+                :selectedRange="deviceHistoryRange"
+              />
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">No devices configured.</div>
       </template>
     </Card>
 
@@ -2218,5 +2249,83 @@ function statusSeverity(status?: string) {
 
 .socket-badge i {
   font-size: 0.5rem;
+}
+
+/* ── Device History ─────────────────────────────────── */
+
+.device-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.device-history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+.device-history-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.device-history-name {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.chart-controls-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chart-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.chart-chip-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.chart-chip {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.chart-chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.chart-chip--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-base);
+  font-weight: 600;
 }
 </style>

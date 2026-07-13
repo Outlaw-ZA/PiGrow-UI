@@ -1,0 +1,198 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Line } from 'vue-chartjs'
+import {
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Title,
+  Tooltip,
+} from 'chart.js'
+import type { TooltipItem } from 'chart.js'
+import { useApiStore } from '../stores/apiStore'
+import type { DeviceStateLog } from '../types/grow'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
+
+const props = defineProps<{
+  deviceId: string
+  deviceName: string
+  selectedRange: number
+}>()
+
+const store = useApiStore()
+
+const loading = ref(false)
+const error = ref<string | null>(null)
+const logs = ref<DeviceStateLog[]>([])
+const priorAction = ref<'ON' | 'OFF' | null>(null)
+
+async function fetchLogs() {
+  if (!props.deviceId) {
+    return
+  }
+  loading.value = true
+  error.value = null
+  const to = new Date().toISOString()
+  const from = new Date(Date.now() - props.selectedRange * 1000).toISOString()
+  try {
+    const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to })
+    logs.value = data.logs ?? []
+    priorAction.value = data.priorAction ?? null
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('DeviceHistoryChart fetch failed:', msg)
+    error.value = 'Failed to load device history'
+    logs.value = []
+    priorAction.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+const chartData = computed(() => {
+  const data = logs.value
+  const rangeSec = props.selectedRange
+  const to = new Date()
+  const from = new Date(to.getTime() - rangeSec * 1000)
+
+  const points: { time: Date; value: number }[] = []
+
+  const initialVal = priorAction.value === 'ON' ? 1 : 0
+  points.push({ time: from, value: initialVal })
+
+  for (const log of data) {
+    points.push({
+      time: new Date(log.createdAt),
+      value: log.action === 'ON' ? 1 : 0,
+    })
+  }
+
+  const lastVal = data.length > 0 ? (data.at(-1)!.action === 'ON' ? 1 : 0) : initialVal
+  points.push({ time: to, value: lastVal })
+
+  return {
+    datasets: [
+      {
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+        borderColor: 'rgb(34, 197, 94)',
+        borderWidth: 1.5,
+        data: points.map((p) => p.value),
+        fill: true,
+        label: props.deviceName,
+        pointHitRadius: 4,
+        pointRadius: 0,
+        stepped: 'before' as const,
+        tension: 0,
+      },
+    ],
+    labels: points.map((p) => p.time.toLocaleTimeString()),
+  }
+})
+
+const chartOptions = computed(() => ({
+  animation: { duration: 200 },
+  interaction: {
+    intersect: false,
+    mode: 'index' as const,
+  },
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (ctx: TooltipItem<'line'>) => (ctx.parsed.y === 1 ? 'ON' : 'OFF'),
+      },
+      enabled: true,
+    },
+  },
+  responsive: true,
+  scales: {
+    x: {
+      display: true,
+      grid: { display: false },
+      ticks: {
+        color: 'rgba(255, 255, 255, 0.4)',
+        font: { size: 10 },
+        maxTicksLimit: 6,
+      },
+    },
+    y: {
+      display: true,
+      grid: { display: false },
+      max: 1.1,
+      min: -0.1,
+      ticks: {
+        callback: (v: number | string) => (Number(v) === 1 ? 'ON' : 'OFF'),
+        color: 'rgba(255, 255, 255, 0.4)',
+        font: { size: 10 },
+        stepSize: 1,
+      },
+    },
+  },
+}))
+
+watch(() => props.selectedRange, fetchLogs)
+
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  fetchLogs()
+  refreshTimer = setInterval(fetchLogs, 30_000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+})
+</script>
+
+<template>
+  <div class="device-history-chart">
+    <div class="chart-container">
+      <div v-if="loading" class="chart-state"><i class="pi pi-spin pi-spinner" /> Loading…</div>
+      <div v-else-if="error" class="chart-state chart-error">
+        {{ error }}
+      </div>
+      <div v-else-if="!logs.length && priorAction === null" class="chart-state chart-empty">
+        No state changes
+      </div>
+      <Line v-else :data="chartData" :options="chartOptions" class="chart-canvas" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.device-history-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  position: relative;
+  height: 100px;
+}
+
+.chart-canvas {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.chart-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.chart-error {
+  color: var(--color-danger);
+}
+</style>

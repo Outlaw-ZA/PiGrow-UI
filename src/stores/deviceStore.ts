@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import axios from 'axios'
-import type { Device, DeviceSeed } from '../types/grow'
+import type { Device, DeviceSeed, DeviceStateLog } from '../types/grow'
 import { API_BASE } from './apiBase'
 import { useControllerStore } from './controllerStore'
 
@@ -99,6 +99,14 @@ export const useDeviceStore = defineStore('device', () => {
     updateDeviceInCache(controllerId, { id: deviceId, isActive: action === 'ON' })
   }
 
+  async function fetchDeviceStateLogs(
+    deviceId: string,
+    params?: { from?: string; to?: string; limit?: number },
+  ) {
+    const res = await axios.get(`${API_BASE}/devices/${deviceId}/state-logs`, { params })
+    return res.data as { logs: DeviceStateLog[]; priorAction: 'ON' | 'OFF' | null }
+  }
+
   let pollingTimer: ReturnType<typeof setInterval> | null = null
 
   function pollDevices(controllerId: string, intervalMs = 5000) {
@@ -123,6 +131,7 @@ export const useDeviceStore = defineStore('device', () => {
     createDevice,
     createDevicesBatch,
     deleteDevice,
+    fetchDeviceStateLogs,
     fetchDevices,
     findDeviceOnController,
     pollDevices,

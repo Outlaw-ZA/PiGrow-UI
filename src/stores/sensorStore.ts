@@ -11,7 +11,6 @@ export type CreateSensorPayload = SensorSeed & {
 export interface UpdateSensorPayload {
   name?: string
   type?: Sensor['type']
-  mqttTopic?: string
   pinNumbers?: number[]
   protocol?: Sensor['protocol']
   lastActive?: string

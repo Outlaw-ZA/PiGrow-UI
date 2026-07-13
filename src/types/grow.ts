@@ -65,9 +65,9 @@ export interface Device {
   name: string
   type: DeviceType
   pinNumber: number
-  mqttTopic: string
   automationMode: AutomationMode
   isActive: boolean
+  maxOnSeconds?: number | null
   createdAt: string
   updatedAt: string
   controller?: Controller
@@ -78,7 +78,6 @@ export interface DeviceSeed {
   name: string
   type: DeviceType
   pinNumber: number
-  mqttTopic: string
   automationMode?: AutomationMode
   isActive?: boolean
 }
@@ -88,7 +87,6 @@ export interface Sensor {
   controllerId: string
   name: string
   type: SensorType
-  mqttTopic: string
   pinNumbers: number[]
   protocol: SensorProtocol
   lastActive?: string | null
@@ -100,7 +98,6 @@ export interface Sensor {
 export interface SensorSeed {
   name: string
   type: SensorType
-  mqttTopic: string
   pinNumbers: number[]
   protocol: SensorProtocol
 }

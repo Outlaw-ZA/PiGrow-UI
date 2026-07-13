@@ -14,7 +14,6 @@ const fan: Device = {
   createdAt: '',
   id: 'd1',
   isActive: true,
-  mqttTopic: '',
   name: 'Exhaust',
   pinNumber: 1,
   type: DeviceType.EXHAUST_FAN,
