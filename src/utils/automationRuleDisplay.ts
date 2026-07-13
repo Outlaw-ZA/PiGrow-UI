@@ -37,7 +37,7 @@ export function formatIntervalRule(rule: AutomationRule): string {
  * Format minutes-from-midnight as a 24-hour HH:MM string.
  * Returns "—" when the value is null or out of range.
  */
-export function formatScheduleTime(minutes: number | null | undefined): string {
+export function formatScheduleTime(minutes?: number | null): string {
   if (minutes == null) {
     return '—'
   }

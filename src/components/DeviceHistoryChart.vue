@@ -42,8 +42,8 @@ async function fetchLogs() {
     const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to })
     logs.value = data.logs ?? []
     priorAction.value = data.priorAction ?? null
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
     console.error('DeviceHistoryChart fetch failed:', msg)
     error.value = 'Failed to load device history'
     logs.value = []
