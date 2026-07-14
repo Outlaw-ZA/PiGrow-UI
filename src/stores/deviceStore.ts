@@ -32,7 +32,25 @@ export const useDeviceStore = defineStore('device', () => {
     const devices = res.data as Device[]
     const arr = ensureDevicesArray(controllerId)
     if (arr) {
-      arr.splice(0, arr.length, ...devices)
+      const incomingIds = new Set<string>()
+      for (const device of devices) {
+        incomingIds.add(device.id)
+        const idx = arr.findIndex((d) => d.id === device.id)
+        if (idx !== -1) {
+          const found = arr[idx]
+          if (found) {
+            Object.assign(found, device)
+          }
+        } else {
+          arr.push(device)
+        }
+      }
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const existing = arr[i]
+        if (existing && !incomingIds.has(existing.id)) {
+          arr.splice(i, 1)
+        }
+      }
     }
     return devices
   }

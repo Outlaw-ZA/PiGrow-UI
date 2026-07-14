@@ -123,6 +123,10 @@ function connectDeviceSocket() {
 
 function handleDeviceStateUpdate(data: { deviceId: string; isActive: boolean }) {
   deviceToggles[data.deviceId] = data.isActive
+  const ctrlId = linkedController.value?.id
+  if (ctrlId) {
+    store.updateDeviceInCache(ctrlId, { id: data.deviceId, isActive: data.isActive })
+  }
 }
 
 function disconnectDeviceSocket() {
@@ -710,7 +714,7 @@ onMounted(async () => {
     }
     if (cycle?.controllerId) {
       await store.fetchDevices(cycle.controllerId)
-      store.pollDevices(cycle.controllerId)
+      store.pollDevices(cycle.controllerId, 60000)
       connectDeviceSocket()
     }
     await reconcileGrowState(cycle)

@@ -73,6 +73,7 @@ export const useApiStore = defineStore('api', () => {
     toggleRule: automationRuleStore.toggleRule,
     updateController: controllerStore.updateController,
     updateDevice: deviceStore.updateDevice,
+    updateDeviceInCache: deviceStore.updateDeviceInCache,
     updateGrowCycle: growCycleStore.updateGrowCycle,
     updateGrowPhase: growPhaseStore.updateGrowPhase,
     updateRule: automationRuleStore.updateRule,
