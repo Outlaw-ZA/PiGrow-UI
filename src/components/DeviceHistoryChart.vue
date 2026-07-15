@@ -130,7 +130,7 @@ const chartOptions = computed(() => {
         max: 1.1,
         min: -0.1,
         ticks: {
-          callback: (v: number | string) => (Number(v) === 1 ? 'ON' : 'OFF'),
+          callback: (v: number | string) => (Number(v) > 0.5 ? 'ON' : 'OFF'),
           color: 'rgba(255, 255, 255, 0.4)',
           font: { size: 10 },
           stepSize: 1,
