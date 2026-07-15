@@ -131,6 +131,13 @@ function handleDeviceStateUpdate(data: { deviceId: string; isActive: boolean }) 
   }
 }
 
+function handleSocketReconnect() {
+  const ctrlId = linkedController.value?.id
+  if (ctrlId) {
+    store.fetchDevices(ctrlId)
+  }
+}
+
 function disconnectDeviceSocket() {
   // Socket lifecycle is managed by useLiveTelemetry
 }
@@ -749,12 +756,7 @@ onMounted(async () => {
     const sock = liveTelemetry.socket.value
     if (sock) {
       sock.on('device_state_update', handleDeviceStateUpdate)
-      sock.on('connect', () => {
-        const ctrlId = linkedController.value?.id
-        if (ctrlId) {
-          store.fetchDevices(ctrlId)
-        }
-      })
+      sock.on('connect', handleSocketReconnect)
     }
   }
 })
@@ -777,7 +779,7 @@ onUnmounted(() => {
   const sock = liveTelemetry.socket.value
   if (sock) {
     sock.off('device_state_update', handleDeviceStateUpdate)
-    sock.off('connect')
+    sock.off('connect', handleSocketReconnect)
   }
 })
 
