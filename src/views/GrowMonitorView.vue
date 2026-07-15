@@ -106,6 +106,7 @@ const elapsedDays = computed(() => {
 })
 
 const deviceToggles = reactive<Record<string, boolean>>({})
+const lastDeviceStateUpdate = reactive<Record<string, number>>({})
 
 const TIME_PRESETS = [
   { label: '1h', seconds: 3600 },
@@ -123,6 +124,7 @@ function connectDeviceSocket() {
 
 function handleDeviceStateUpdate(data: { deviceId: string; isActive: boolean }) {
   deviceToggles[data.deviceId] = data.isActive
+  lastDeviceStateUpdate[data.deviceId] = Date.now()
   const ctrlId = linkedController.value?.id
   if (ctrlId) {
     store.updateDeviceInCache(ctrlId, { id: data.deviceId, isActive: data.isActive })
@@ -373,6 +375,10 @@ let envTickHandle: ReturnType<typeof setInterval> | null = null
 // Second-level ticker for the light transition countdown.
 const secondsTick = ref(Date.now())
 let secondsTickHandle: ReturnType<typeof setInterval> | null = null
+
+// Stale device state detection — triggers a REST poll when a device hasn't
+// received a socket state update in STALE_STATE_MS.
+let staleCheckHandle: ReturnType<typeof setInterval> | null = null
 
 const currentMinutesIntoDay = computed(() => {
   // Read nowTick so this computed re-evaluates on the 60s interval.
@@ -714,7 +720,7 @@ onMounted(async () => {
     }
     if (cycle?.controllerId) {
       await store.fetchDevices(cycle.controllerId)
-      store.pollDevices(cycle.controllerId, 60000)
+      store.pollDevices(cycle.controllerId, 15000)
       connectDeviceSocket()
     }
     await reconcileGrowState(cycle)
@@ -722,10 +728,33 @@ onMounted(async () => {
     await automations.reload()
     liveTelemetry.start()
 
+    // Stale state detection: if a device hasn't received a state update in 30s,
+    // trigger an immediate device fetch.
+    const STALE_STATE_MS = 30_000
+    staleCheckHandle = setInterval(() => {
+      const now = Date.now()
+      const ctrlId = linkedController.value?.id
+      if (!ctrlId) return
+      for (const device of growDevices.value) {
+        const last = lastDeviceStateUpdate[device.id!]
+        if (last && now - last > STALE_STATE_MS) {
+          store.fetchDevices(ctrlId)
+          break
+        }
+      }
+    }, 15_000)
+
     // Listen for real-time device state updates from the backend.
+    // On Socket.IO reconnect, fetch fresh device state to catch missed events.
     const sock = liveTelemetry.socket.value
     if (sock) {
       sock.on('device_state_update', handleDeviceStateUpdate)
+      sock.on('connect', () => {
+        const ctrlId = linkedController.value?.id
+        if (ctrlId) {
+          store.fetchDevices(ctrlId)
+        }
+      })
     }
   }
 })
@@ -739,11 +768,16 @@ onUnmounted(() => {
     clearInterval(secondsTickHandle)
     secondsTickHandle = null
   }
+  if (staleCheckHandle) {
+    clearInterval(staleCheckHandle)
+    staleCheckHandle = null
+  }
   store.stopDevicePolling()
   disconnectDeviceSocket()
   const sock = liveTelemetry.socket.value
   if (sock) {
     sock.off('device_state_update', handleDeviceStateUpdate)
+    sock.off('connect')
   }
 })
 
