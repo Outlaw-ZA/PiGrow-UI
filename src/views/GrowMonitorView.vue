@@ -579,7 +579,7 @@ watch(
   (devices) => {
     if (devices) {
       for (const device of devices) {
-        if (device.id && !(device.id in deviceToggles)) {
+        if (device.id) {
           deviceToggles[device.id] = device.isActive
         }
       }
