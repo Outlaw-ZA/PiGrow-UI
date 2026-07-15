@@ -2,20 +2,22 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
-  CategoryScale,
   Chart as ChartJS,
   Filler,
   LineElement,
   LinearScale,
   PointElement,
+  TimeScale,
   Title,
   Tooltip,
 } from 'chart.js'
+import 'chartjs-adapter-date-fns'
 import type { TooltipItem } from 'chart.js'
 import { useApiStore } from '../stores/apiStore'
 import type { DeviceStateLog } from '../types/grow'
+import { getTimeAxisConfig } from '../utils/chartTimeAxis'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
+ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
 
 const props = defineProps<{
   deviceId: string
@@ -80,7 +82,7 @@ const chartData = computed(() => {
         backgroundColor: 'rgba(34, 197, 94, 0.15)',
         borderColor: 'rgb(34, 197, 94)',
         borderWidth: 1.5,
-        data: points.map((p) => p.value),
+        data: points.map((p) => ({ x: p.time.getTime(), y: p.value })),
         fill: true,
         label: props.deviceName,
         pointHitRadius: 4,
@@ -89,7 +91,6 @@ const chartData = computed(() => {
         tension: 0,
       },
     ],
-    labels: points.map((p) => p.time.toLocaleTimeString()),
   }
 })
 
@@ -114,10 +115,12 @@ const chartOptions = computed(() => ({
     x: {
       display: true,
       grid: { display: false },
+      type: 'time',
+      time: getTimeAxisConfig(props.selectedRange),
       ticks: {
         color: 'rgba(255, 255, 255, 0.4)',
         font: { size: 10 },
-        maxTicksLimit: 6,
+        source: 'auto',
       },
     },
     y: {
