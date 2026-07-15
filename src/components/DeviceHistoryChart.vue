@@ -94,49 +94,51 @@ const chartData = computed(() => {
   }
 })
 
-const chartOptions = computed(() => ({
-  animation: { duration: 200 },
-  interaction: {
-    intersect: false,
-    mode: 'index' as const,
-  },
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      callbacks: {
-        label: (ctx: TooltipItem<'line'>) => (ctx.parsed.y === 1 ? 'ON' : 'OFF'),
-      },
-      enabled: true,
+const chartOptions = computed(() => {
+  return {
+    animation: { duration: 200 },
+    interaction: {
+      intersect: false,
+      mode: 'index' as const,
     },
-  },
-  responsive: true,
-  scales: {
-    x: {
-      display: true,
-      grid: { display: false },
-      type: 'time',
-      time: getTimeAxisConfig(props.selectedRange),
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.4)',
-        font: { size: 10 },
-        source: 'auto',
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx: TooltipItem<'line'>) => (ctx.parsed.y === 1 ? 'ON' : 'OFF'),
+        },
+        enabled: true,
       },
     },
-    y: {
-      display: true,
-      grid: { display: false },
-      max: 1.1,
-      min: -0.1,
-      ticks: {
-        callback: (v: number | string) => (Number(v) === 1 ? 'ON' : 'OFF'),
-        color: 'rgba(255, 255, 255, 0.4)',
-        font: { size: 10 },
-        stepSize: 1,
+    responsive: true,
+    scales: {
+      x: {
+        display: true,
+        grid: { display: false },
+        type: 'time' as const,
+        time: getTimeAxisConfig(props.selectedRange),
+        ticks: {
+          color: 'rgba(255, 255, 255, 0.4)',
+          font: { size: 10 },
+          source: 'auto',
+        },
+      },
+      y: {
+        display: true,
+        grid: { display: false },
+        max: 1.1,
+        min: -0.1,
+        ticks: {
+          callback: (v: number | string) => (Number(v) === 1 ? 'ON' : 'OFF'),
+          color: 'rgba(255, 255, 255, 0.4)',
+          font: { size: 10 },
+          stepSize: 1,
+        },
       },
     },
-  },
-}))
+  } as const
+})
 
 watch(() => props.selectedRange, fetchLogs)
 
