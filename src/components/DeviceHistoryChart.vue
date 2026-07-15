@@ -41,7 +41,7 @@ async function fetchLogs() {
   const to = new Date().toISOString()
   const from = new Date(Date.now() - props.selectedRange * 1000).toISOString()
   try {
-    const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to, limit: 2000 })
+    const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to })
     logs.value = data.logs ?? []
     priorAction.value = data.priorAction ?? null
   } catch (err: unknown) {
