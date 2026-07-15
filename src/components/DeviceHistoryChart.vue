@@ -41,7 +41,7 @@ async function fetchLogs() {
   const to = new Date().toISOString()
   const from = new Date(Date.now() - props.selectedRange * 1000).toISOString()
   try {
-    const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to })
+    const data = await store.fetchDeviceStateLogs(props.deviceId, { from, to, limit: 2000 })
     logs.value = data.logs ?? []
     priorAction.value = data.priorAction ?? null
   } catch (err: unknown) {
@@ -66,14 +66,19 @@ const chartData = computed(() => {
   const initialVal = priorAction.value === 'ON' ? 1 : 0
   points.push({ time: from, value: initialVal })
 
+  let prevAction: 'ON' | 'OFF' | null = priorAction.value
   for (const log of data) {
+    if (log.action === prevAction) {
+      continue
+    }
+    prevAction = log.action
     points.push({
       time: new Date(log.createdAt),
       value: log.action === 'ON' ? 1 : 0,
     })
   }
 
-  const lastVal = data.length > 0 ? (data.at(-1)!.action === 'ON' ? 1 : 0) : initialVal
+  const lastVal = data.length > 0 ? (prevAction === 'ON' ? 1 : 0) : initialVal
   points.push({ time: to, value: lastVal })
 
   return {
