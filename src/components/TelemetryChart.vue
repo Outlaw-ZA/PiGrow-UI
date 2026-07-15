@@ -2,21 +2,23 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
-  CategoryScale,
   Chart as ChartJS,
   Filler,
   LineElement,
   LinearScale,
   PointElement,
+  TimeScale,
   Title,
   Tooltip,
 } from 'chart.js'
+import 'chartjs-adapter-date-fns'
 import type { TooltipItem } from 'chart.js'
 import { useApiStore } from '../stores/apiStore'
+import { getTimeAxisConfig } from '../utils/chartTimeAxis'
 import { SensorType } from '../types/grow'
 import type { Telemetry } from '../types/grow'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
+ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Title, Tooltip, Filler)
 
 const props = defineProps<{
   growCycleId: string
@@ -80,7 +82,7 @@ const chartData = computed(() => {
         backgroundColor: `${config?.color?.replace('rgb', 'rgba').replace(')', ', 0.1)') ?? 'rgba(75, 192, 192, 0.1)'}`,
         borderColor: config?.color ?? 'rgb(75, 192, 192)',
         borderWidth: 2,
-        data: data.map((d) => d.value),
+        data: data.map((d) => ({ x: new Date(d.createdAt).getTime(), y: d.value })),
         fill: true,
         label: config?.label ?? selectedType.value,
         pointHitRadius: 8,
@@ -88,7 +90,6 @@ const chartData = computed(() => {
         tension: 0.3,
       },
     ],
-    labels: data.map((d) => new Date(d.createdAt).toLocaleTimeString()),
   }
 })
 
@@ -119,10 +120,12 @@ const chartOptions = computed(() => {
       x: {
         display: true,
         grid: { display: false },
+        type: 'time',
+        time: getTimeAxisConfig(selectedRange.value),
         ticks: {
           color: 'rgba(255, 255, 255, 0.5)',
           font: { size: 11 },
-          maxTicksLimit: 10,
+          source: 'auto',
         },
       },
       y: {
