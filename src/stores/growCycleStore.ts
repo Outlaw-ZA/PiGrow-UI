@@ -130,10 +130,25 @@ export const useGrowCycleStore = defineStore('growCycle', () => {
     return res.data as GrowCycle
   }
 
+  async function extendActivePhase(id: string, days: number) {
+    const res = await axios.post(`${API_BASE}/grow-cycles/${id}/extend-active-phase`, {
+      days,
+    })
+    const idx = growCycles.value.findIndex((g) => g.id === id)
+    if (idx !== -1) {
+      growCycles.value[idx] = {
+        ...growCycles.value[idx],
+        ...(res.data as GrowCycle),
+      } as GrowCycleListItem
+    }
+    return res.data as GrowCycle
+  }
+
   return {
     createGrowCycle,
     deleteGrowCycle,
     endGrow,
+    extendActivePhase,
     fetchAll,
     fetchGrowCycle,
     growCycles,

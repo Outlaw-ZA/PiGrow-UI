@@ -4,6 +4,7 @@ import type { Socket } from 'socket.io-client'
 import type { FrontendTelemetry, SensorType } from '../types/grow'
 import axios from 'axios'
 import { API_BASE } from '../stores/apiBase'
+import { useGrowCycleStore } from '../stores/growCycleStore'
 
 const MAX_HISTORY_PER_SENSOR = 500
 
@@ -96,6 +97,10 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
       }
     })
 
+    socket.value.on('cycle_phase_changed', handleCycleMutation)
+    socket.value.on('cycle_completed', handleCycleMutation)
+    socket.value.on('cycle_phase_extended', handleCycleMutation)
+
     seedFromApi()
     pollingHandle = setInterval(() => {
       if (isStarted) {
@@ -107,6 +112,9 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
   function stop() {
     isStarted = false
     if (socket.value) {
+      socket.value.off('cycle_phase_changed', handleCycleMutation)
+      socket.value.off('cycle_completed', handleCycleMutation)
+      socket.value.off('cycle_phase_extended', handleCycleMutation)
       socket.value.removeAllListeners()
       socket.value.disconnect()
       socket.value = null
@@ -117,6 +125,13 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
     }
     connected.value = false
     loading.value = false
+  }
+
+  function handleCycleMutation(payload: { cycleId: string }) {
+    const currentId = getCycleId()
+    if (payload?.cycleId && currentId && payload.cycleId === currentId) {
+      void useGrowCycleStore().fetchGrowCycle(currentId)
+    }
   }
 
   onUnmounted(stop)

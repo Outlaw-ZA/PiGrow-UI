@@ -28,6 +28,7 @@ import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import ConfirmDialog from 'primevue/confirmdialog'
 import OverviewTab from './OverviewTab.vue'
+import ExtendPhaseDialog from './ExtendPhaseDialog.vue'
 
 const HistoryTab = defineAsyncComponent(() => import('./HistoryTab.vue'))
 const PlanTab = defineAsyncComponent(() => import('./PlanTab.vue'))
@@ -63,30 +64,66 @@ const {
 const activeTab = ref<'overview' | 'history' | 'plan'>('overview')
 
 const phaseMenu = useTemplateRef<InstanceType<typeof Menu>>('phaseMenu')
+const showExtendDialog = ref(false)
 
 function togglePhaseMenu(event: Event) {
   phaseMenu.value?.toggle(event)
 }
 
-const phaseMenuItems = computed(() => {
-  if (state.isOnLastPhase.value) {
-    return [
-      {
-        command: () => confirmEndGrow(),
-        disabled: ending.value,
-        icon: 'pi pi-trophy',
-        label: 'End grow',
-      },
-    ]
+function openExtendDialog() {
+  showExtendDialog.value = true
+}
+
+const activePhase = computed<GrowPhase | null>(() => {
+  const idx = state.activePhaseIndex.value
+  if (idx < 0) {
+    return null
   }
-  return [
-    {
+  return state.sortedPhases.value[idx] ?? null
+})
+
+const canExtendPhase = computed(
+  () =>
+    Boolean(state.currentCycle.value?.isActive) &&
+    state.activePhaseIndex.value >= 0 &&
+    !skipping.value &&
+    !ending.value,
+)
+
+const phaseMenuItems = computed(() => {
+  const items: {
+    command: () => void
+    disabled?: boolean
+    icon: string
+    label: string
+  }[] = []
+
+  if (canExtendPhase.value) {
+    items.push({
+      command: () => openExtendDialog(),
+      disabled: skipping.value || ending.value,
+      icon: 'pi pi-calendar-plus',
+      label: 'Extend phase…',
+    })
+  }
+
+  if (state.isOnLastPhase.value) {
+    items.push({
+      command: () => confirmEndGrow(),
+      disabled: ending.value,
+      icon: 'pi pi-trophy',
+      label: 'End grow',
+    })
+  } else {
+    items.push({
       command: () => confirmSkipPhase(),
       disabled: !state.canSkipPhase.value || skipping.value,
       icon: 'pi pi-forward',
       label: 'Skip to next phase',
-    },
-  ]
+    })
+  }
+
+  return items
 })
 
 function confirmSkipPhase() {
@@ -433,6 +470,14 @@ onUnmounted(() => {
         </TabPanel>
       </TabPanels>
     </Tabs>
+
+    <ExtendPhaseDialog
+      v-model:visible="showExtendDialog"
+      :cycle-id="cycleId"
+      :active-phase="activePhase"
+      :start-at="state.currentCycle.value?.startAt ?? null"
+      :total-duration-days="state.totalDurationDays.value"
+    />
   </div>
   <div v-else class="not-found">
     <Card>

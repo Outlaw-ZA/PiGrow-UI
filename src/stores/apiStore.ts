@@ -48,6 +48,7 @@ export const useApiStore = defineStore('api', () => {
     deleteRule: automationRuleStore.deleteRule,
     deleteSensor: sensorStore.deleteSensor,
     endGrow: growCycleStore.endGrow,
+    extendActivePhase: growCycleStore.extendActivePhase,
     fetchAll,
     fetchController: controllerStore.fetchController,
     fetchDeviceStateLogs: deviceStore.fetchDeviceStateLogs,
