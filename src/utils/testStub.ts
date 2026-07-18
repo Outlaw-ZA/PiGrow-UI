@@ -23,15 +23,18 @@ const InputNumberStub = defineComponent({
   },
 })
 
+// `defineComponent` returns a `DefineComponent` whose signature is wider than
+// the `true | ConcreteComponent` shape that `@vue/test-utils` accepts in its
+// stubs map. Cast to the structural type so the stubs are usable in tests.
 export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   Button: true,
-  Dialog: DialogStub,
-  InputNumber: InputNumberStub,
+  Dialog: DialogStub as unknown as ConcreteComponent,
+  InputNumber: InputNumberStub as unknown as ConcreteComponent,
   Message: true,
   Select: true,
   'primevue/button': true,
-  'primevue/dialog': DialogStub,
-  'primevue/inputnumber': InputNumberStub,
+  'primevue/dialog': DialogStub as unknown as ConcreteComponent,
+  'primevue/inputnumber': InputNumberStub as unknown as ConcreteComponent,
   'primevue/message': true,
   'primevue/select': true,
 }

@@ -31,8 +31,14 @@ const ioMock = vi.fn(() => socketInstance)
 
 const fetchGrowCycleMock = vi.fn().mockResolvedValue({ id: 'c1' })
 
+// Cast through `never`: the real `io()` has a complex variadic + overload
+// signature that TypeScript can't reconcile with a single `vi.fn(() => ...)`
+// returning a plain object. The wrapper function keeps the reference to
+// `ioMock` lazy (so the vi.mock factory can hoist cleanly) while `as never`
+// silences the structural type mismatch — the runtime contract is "returns
+// socketInstance", which the tests verify.
 vi.mock('socket.io-client', () => ({
-  io: (...args: unknown[]) => ioMock(...args),
+  io: ((..._args: unknown[]) => ioMock()) as never,
 }))
 
 vi.mock('../stores/growCycleStore', () => ({
