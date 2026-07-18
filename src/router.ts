@@ -2,7 +2,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from './views/HomeView.vue'
 import AdminView from './views/AdminView.vue'
-import GrowMonitorView from './views/GrowMonitorView.vue'
+import GrowMonitorView from './views/grow-monitor/GrowMonitorView.vue'
+import NotFoundView from './views/NotFoundView.vue'
 
 // Controller Views
 import ControllerFormView from './views/admin/ControllerFormView.vue'
@@ -32,6 +33,13 @@ const router = createRouter({
       name: 'grow-monitor',
       path: '/grow/:id',
       props: true, // Pass the :id parameter down into the component as a native prop
+    },
+
+    // Catch-all
+    {
+      component: NotFoundView,
+      name: 'not-found',
+      path: '/:pathMatch(.*)*',
     },
   ],
 })

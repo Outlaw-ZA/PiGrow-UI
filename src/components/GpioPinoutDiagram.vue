@@ -64,7 +64,6 @@ const bodyBottomY = startY + LEFT_COLUMN.length * rowHeight + 4
             class="pin"
             :class="[
               `pin--${pin.kind}`,
-              { 'pin--highlight': pin.label === 'BCM 4' },
               pin.fn ? `pin--has-fn` : null,
               pin.fn ? `pin--fn-${pin.fn.family.toLowerCase()}` : null,
             ]"
@@ -99,7 +98,6 @@ const bodyBottomY = startY + LEFT_COLUMN.length * rowHeight + 4
             class="pin"
             :class="[
               `pin--${pin.kind}`,
-              { 'pin--highlight': pin.label === 'BCM 4' },
               pin.fn ? `pin--has-fn` : null,
               pin.fn ? `pin--fn-${pin.fn.family.toLowerCase()}` : null,
             ]"
@@ -212,13 +210,6 @@ const bodyBottomY = startY + LEFT_COLUMN.length * rowHeight + 4
   stroke-dasharray: 3 2;
 }
 
-.pin--highlight {
-  stroke: var(--color-accent);
-  stroke-width: 2;
-  filter: drop-shadow(0 0 6px var(--color-accent-glow));
-  fill: rgba(34, 197, 94, 0.18);
-}
-
 .pin--has-fn.pin--fn-i2c {
   stroke: var(--color-bus-i2c);
   fill: var(--color-bus-i2c-bg);
@@ -292,10 +283,6 @@ const bodyBottomY = startY + LEFT_COLUMN.length * rowHeight + 4
 
 .pin--id ~ .pin-label {
   fill: var(--color-warning);
-}
-
-.pin--highlight ~ .pin-label {
-  fill: var(--color-accent);
 }
 
 .pin--has-fn.pin--fn-i2c ~ .pin-label {

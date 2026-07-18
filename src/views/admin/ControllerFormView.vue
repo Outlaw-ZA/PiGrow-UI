@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../../stores/apiStore'
 import { AutomationMode, DeviceType, SensorProtocol, SensorType } from '../../types/grow'
@@ -12,6 +12,8 @@ import {
   formatSensorProtocol,
   formatSensorType,
 } from '../../utils/sensors'
+import { BCM_TO_PHYS } from '../../data/gpio-pins'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import type { CreateControllerPayload } from '../../stores/controllerStore'
 import { extractApiError } from '../../utils/errors'
 import { useToast } from 'primevue/usetoast'
@@ -48,6 +50,8 @@ const controllerId = computed(() => route.params.id as string | undefined)
 const isEditMode = computed(() => Boolean(controllerId.value))
 
 const form = ref({ ipAddress: '', macAddress: '', name: '' })
+const initialForm = ref({ ipAddress: '', macAddress: '', name: '' })
+const saving = ref(false)
 const activeTab = ref<'details' | 'sensors' | 'devices'>('details')
 
 const liveSensors = computed<Sensor[]>(
@@ -69,6 +73,18 @@ const liveDevices = computed<Device[]>(
 )
 
 const showWiring = ref(false)
+
+const isDirty = computed(
+  () =>
+    form.value.name !== initialForm.value.name ||
+    form.value.ipAddress !== initialForm.value.ipAddress ||
+    (isEditMode.value
+      ? form.value.macAddress !== initialForm.value.macAddress
+      : form.value.macAddress.trim().length > 0) ||
+    stagedSensors.value.length > 0 ||
+    stagedDevices.value.length > 0,
+)
+useUnsavedGuard(isDirty)
 
 // ---------- Sensors (unchanged from original) ----------
 
@@ -260,10 +276,16 @@ const deviceForm = ref({
   automationMode: AutomationMode.MANUAL,
   isActive: true,
   name: '',
-  pinNumber: '',
+  pinNumber: null as number | null,
   type: DeviceType.LIGHT,
 })
 const openDevicePinoutPanels = ref<string[]>([])
+
+const devicePinOptions = computed<{ label: string; value: number }[]>(() =>
+  [...BCM_TO_PHYS.entries()]
+    .map(([bcm, phys]) => ({ label: `BCM ${bcm} (pin ${phys})`, value: bcm }))
+    .toSorted((a, b) => a.value - b.value),
+)
 
 const editingDevice = computed(() => {
   if (!editingDeviceKey.value) {
@@ -285,7 +307,7 @@ const isEditDevice = computed(
 const canSaveDevice = computed(
   () =>
     deviceForm.value.name.trim().length > 0 &&
-    deviceForm.value.pinNumber !== '' &&
+    deviceForm.value.pinNumber !== null &&
     deviceForm.value.type !== undefined,
 )
 
@@ -316,7 +338,7 @@ function openAddDevice() {
     automationMode: AutomationMode.MANUAL,
     isActive: true,
     name: '',
-    pinNumber: '',
+    pinNumber: null,
     type: DeviceType.LIGHT,
   }
   editingDeviceKey.value = null
@@ -330,7 +352,7 @@ function openEditDevice(device: Device | StagedDevice) {
     automationMode: device.automationMode ?? AutomationMode.MANUAL,
     isActive: device.isActive ?? true,
     name: device.name,
-    pinNumber: String(device.pinNumber),
+    pinNumber: device.pinNumber,
     type: device.type,
   }
   if ('id' in device && device.id) {
@@ -351,14 +373,14 @@ function closeDeviceModal() {
 }
 
 async function saveDevice() {
-  if (!canSaveDevice.value || !deviceForm.value.pinNumber) {
+  if (!canSaveDevice.value || deviceForm.value.pinNumber === null) {
     return
   }
   const payload: DeviceSeed = {
     automationMode: deviceForm.value.automationMode,
     isActive: deviceForm.value.isActive,
     name: deviceForm.value.name.trim(),
-    pinNumber: Number(deviceForm.value.pinNumber),
+    pinNumber: deviceForm.value.pinNumber,
     type: deviceForm.value.type,
   }
 
@@ -460,31 +482,38 @@ onMounted(async () => {
     await store.fetchController(controllerId.value)
     await store.fetchDevices(controllerId.value)
   }
+  initialForm.value = { ...form.value }
 })
 
 async function handleSave() {
-  if (isEditMode.value && controllerId.value) {
-    await store.updateController(controllerId.value, form.value)
-    router.push('/admin')
+  if (saving.value) {
     return
   }
-
-  const payload: CreateControllerPayload = {
-    ipAddress: form.value.ipAddress,
-    macAddress: form.value.macAddress,
-    name: form.value.name,
-  }
-  if (stagedSensors.value.length > 0) {
-    payload.sensors = stagedSensors.value.map((s) => ({
-      name: s.name,
-      pinNumbers: s.pinNumbers,
-      protocol: s.protocol,
-      type: s.type,
-    }))
-  }
-
+  saving.value = true
   try {
+    if (isEditMode.value && controllerId.value) {
+      await store.updateController(controllerId.value, form.value)
+      initialForm.value = { ...form.value }
+      router.push('/admin')
+      return
+    }
+
+    const payload: CreateControllerPayload = {
+      ipAddress: form.value.ipAddress,
+      macAddress: form.value.macAddress,
+      name: form.value.name,
+    }
+    if (stagedSensors.value.length > 0) {
+      payload.sensors = stagedSensors.value.map((s) => ({
+        name: s.name,
+        pinNumbers: s.pinNumbers,
+        protocol: s.protocol,
+        type: s.type,
+      }))
+    }
+
     const created = await store.createController(payload)
+    let deviceFailures = 0
     if (stagedDevices.value.length > 0) {
       try {
         await store.createDevicesBatch(
@@ -497,8 +526,15 @@ async function handleSave() {
             type: d.type,
           })),
         )
-      } catch {
-        // Batch failure is non-fatal — controller already created
+      } catch (error) {
+        deviceFailures = stagedDevices.value.length
+        const { message } = extractApiError(error, 'Failed to create staged devices')
+        toast.add({
+          detail: `${message} The controller was created — open it in edit mode to retry the devices.`,
+          life: 8000,
+          severity: 'warn',
+          summary: `${deviceFailures} device${deviceFailures === 1 ? '' : 's'} not created`,
+        })
       }
     }
     if (stagedSensors.value.length > 0 && !created.sensors?.length) {
@@ -510,12 +546,17 @@ async function handleSave() {
         summary: 'Sensors not seeded',
       })
     }
-    router.push('/admin')
+    if (deviceFailures === 0) {
+      initialForm.value = { ...form.value }
+      router.push('/admin')
+    }
     return
   } catch (error) {
     const { message } = extractApiError(error, 'Failed to create controller')
     toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Create failed' })
     return
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -581,7 +622,11 @@ async function handleSave() {
                 </p>
                 <div class="form-actions">
                   <Button label="Cancel" severity="secondary" @click="router.push('/admin')" />
-                  <Button :label="isEditMode ? 'Save Changes' : 'Create'" @click="handleSave" />
+                  <Button
+                    :label="isEditMode ? 'Save Changes' : 'Create'"
+                    :loading="saving"
+                    @click="handleSave"
+                  />
                 </div>
               </div>
             </TabPanel>
@@ -942,12 +987,16 @@ async function handleSave() {
 
         <div class="field-row">
           <div class="field">
-            <label for="dev-pin" class="field-label">GPIO Pin</label>
-            <InputText
+            <label for="dev-pin" class="field-label">GPIO Pin (BCM)</label>
+            <Select
               id="dev-pin"
               v-model="deviceForm.pinNumber"
-              placeholder="4"
+              :options="devicePinOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select BCM GPIO pin"
               class="full-width"
+              filter
             />
           </div>
           <div class="field">

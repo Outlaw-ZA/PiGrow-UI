@@ -76,6 +76,7 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
     socket.value.on('connect', () => {
       loading.value = false
       connected.value = true
+      error.value = null
     })
 
     socket.value.on('connect_error', () => {
@@ -85,6 +86,7 @@ export function useLiveTelemetry(getCycleId: () => string | null) {
 
     socket.value.on('disconnect', () => {
       connected.value = false
+      error.value = null
     })
 
     socket.value.on('frontend_telemetry', (data: FrontendTelemetry) => {

@@ -2,33 +2,84 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useApiStore } from '../stores/apiStore'
+import { useToast } from 'primevue/usetoast'
+import { extractApiError } from '../utils/errors'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
+import ConfirmDialog from 'primevue/confirmdialog'
+import { useConfirm } from 'primevue/useconfirm'
 
 const store = useApiStore()
 const router = useRouter()
+const toast = useToast()
+const confirm = useConfirm()
 
 onMounted(() => {
   store.fetchAll()
 })
 
-async function deleteController(id: string) {
-  if (confirm('Delete this controller and all its devices?')) {
+function confirmDeleteController(id: string, name: string) {
+  confirm.require({
+    accept: () => deleteController(id, name),
+    acceptLabel: 'Delete controller',
+    acceptProps: { severity: 'danger' },
+    header: `Delete "${name}"`,
+    icon: 'pi pi-exclamation-triangle',
+    message:
+      'This will permanently delete the controller and all its registered devices, sensors, and grow-cycle history. This cannot be undone.',
+    rejectLabel: 'Cancel',
+  })
+}
+
+async function deleteController(id: string, name: string) {
+  try {
     await store.deleteController(id)
+    toast.add({
+      detail: `Controller "${name}" deleted`,
+      life: 3000,
+      severity: 'success',
+      summary: 'Deleted',
+    })
+  } catch (error) {
+    const { message } = extractApiError(error, 'Failed to delete controller')
+    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
   }
 }
 
-async function deleteGrowCycle(id: string) {
-  if (confirm('Delete this grow cycle and all associated data?')) {
+function confirmDeleteGrowCycle(id: string, name: string) {
+  confirm.require({
+    accept: () => deleteGrowCycle(id, name),
+    acceptLabel: 'Delete grow cycle',
+    acceptProps: { severity: 'danger' },
+    header: `Delete "${name}"`,
+    icon: 'pi pi-exclamation-triangle',
+    message:
+      'This will permanently delete the grow cycle, all its phases, environment targets, automation rules, and telemetry history. This cannot be undone.',
+    rejectLabel: 'Cancel',
+  })
+}
+
+async function deleteGrowCycle(id: string, name: string) {
+  try {
     await store.deleteGrowCycle(id)
+    toast.add({
+      detail: `Grow cycle "${name}" deleted`,
+      life: 3000,
+      severity: 'success',
+      summary: 'Deleted',
+    })
+  } catch (error) {
+    const { message } = extractApiError(error, 'Failed to delete grow cycle')
+    toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
   }
 }
 </script>
 
 <template>
+  <ConfirmDialog />
   <div class="admin-page">
     <Card>
       <template #title>
@@ -75,7 +126,7 @@ async function deleteGrowCycle(id: string) {
                   rounded
                   size="small"
                   aria-label="Delete"
-                  @click="deleteController(slotProps.data.id)"
+                  @click="confirmDeleteController(slotProps.data.id, slotProps.data.name)"
                 />
               </div>
             </template>
@@ -141,7 +192,7 @@ async function deleteGrowCycle(id: string) {
                   rounded
                   size="small"
                   aria-label="Delete"
-                  @click="deleteGrowCycle(slotProps.data.id)"
+                  @click="confirmDeleteGrowCycle(slotProps.data.id, slotProps.data.name)"
                 />
               </div>
             </template>

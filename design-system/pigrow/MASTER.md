@@ -7,201 +7,324 @@
 ---
 
 **Project:** PiGrow
-**Generated:** 2026-06-19 05:42:29
-**Category:** Smart Home/IoT Dashboard
+**Category:** Smart Home/IoT Dashboard (dark, single-operator, desktop + occasional tablet)
+**Last refreshed:** 2026-07-17 (against `main`)
 
 ---
 
-## Global Rules
+## Stack & Source of Truth
 
-### Color Palette
+- **Framework:** Vue 3 (Composition API, `<script setup>`)
+- **UI library:** PrimeVue 4 (Aura preset, dark-mode override in `src/main.ts`)
+- **Theming:** custom `AppPreset = definePreset(Aura, …)` in `src/main.ts` is the source of truth for PrimeVue component tokens (button, card, datatable, dialog, inputs, switch, tag, tooltip). When the preset changes, the project changes.
+- **CSS tokens:** `src/assets/design-tokens.css` — semantic color, spacing, radius, shadow, transition, z-index, focus.
+- **Global styles:** `src/assets/base.css` (reset + focus ring), `src/assets/main.css` (imports the above), `src/assets/transitions.css` (keyframes + `prefers-reduced-motion`).
 
-| Role       | Hex       | CSS Variable         |
-| ---------- | --------- | -------------------- |
-| Primary    | `#1E293B` | `--color-primary`    |
-| Secondary  | `#334155` | `--color-secondary`  |
-| CTA/Accent | `#22C55E` | `--color-cta`        |
-| Background | `#0F172A` | `--color-background` |
-| Text       | `#F8FAFC` | `--color-text`       |
-
-**Color Notes:** Dark tech + status green
-
-### Typography
-
-- **Heading Font:** Cinzel
-- **Body Font:** Josefin Sans
-- **Mood:** real estate, luxury, elegant, sophisticated, property, premium
-- **Google Fonts:** [Cinzel + Josefin Sans](https://fonts.google.com/share?selection.family=Cinzel:wght@400;500;600;700|Josefin+Sans:wght@300;400;500;600;700)
-
-**CSS Import:**
-
-```css
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Josefin+Sans:wght@300;400;500;600;700&display=swap');
-```
-
-### Spacing Variables
-
-| Token         | Value             | Usage                     |
-| ------------- | ----------------- | ------------------------- |
-| `--space-xs`  | `4px` / `0.25rem` | Tight gaps                |
-| `--space-sm`  | `8px` / `0.5rem`  | Icon gaps, inline spacing |
-| `--space-md`  | `16px` / `1rem`   | Standard padding          |
-| `--space-lg`  | `24px` / `1.5rem` | Section padding           |
-| `--space-xl`  | `32px` / `2rem`   | Large gaps                |
-| `--space-2xl` | `48px` / `3rem`   | Section margins           |
-| `--space-3xl` | `64px` / `4rem`   | Hero padding              |
-
-### Shadow Depths
-
-| Level         | Value                          | Usage                       |
-| ------------- | ------------------------------ | --------------------------- |
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)`   | Subtle lift                 |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)`    | Cards, buttons              |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)`  | Modals, dropdowns           |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+If this file and the code disagree, the **code wins**. Update this file whenever you change the preset or tokens.
 
 ---
 
-## Component Specs
+## Color Palette
+
+### Surfaces
+
+| Token                 | Hex       | Role                                 |
+| --------------------- | --------- | ------------------------------------ |
+| `--color-bg-base`     | `#0b1120` | App background                       |
+| `--color-bg-surface`  | `#151d2e` | Card / panel background              |
+| `--color-bg-elevated` | `#1c2640` | Hover, code blocks, elevated widgets |
+| `--color-bg-hover`    | `#222e48` | Interactive hover surface            |
+| `--color-bg-muted`    | `#2a3654` | Scrollbar thumb                      |
+
+### Borders
+
+| Token                   | Hex       | Role                                                         |
+| ----------------------- | --------- | ------------------------------------------------------------ |
+| `--color-border`        | `#1c2640` | Default border (cards, inputs, tables)                       |
+| `--color-border-subtle` | `#243049` | Soft divider (≥1.4:1 against `bg-base` so it actually shows) |
+| `--color-border-active` | `#22c55e` | Focused / active border                                      |
+
+### Text
+
+| Token                    | Hex       | Role                                | Min contrast against `bg-base`                                         |
+| ------------------------ | --------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| `--color-text-primary`   | `#f1f5f9` | Headings, body                      | ~16:1                                                                  |
+| `--color-text-secondary` | `#94a3b8` | Subheads, helper text               | ~9.4:1                                                                 |
+| `--color-text-muted`     | `#94a3b8` | Captions, hints, disabled           | ~9.4:1 (was `#64748b` ≈ 5.2:1, failed AA on elevated surfaces — fixed) |
+| `--color-text-inverse`   | `#0f172a` | Text on accent / bright backgrounds | —                                                                      |
+
+### Accent (status + CTA)
+
+| Token                   | Hex / value               | Role                                                     |
+| ----------------------- | ------------------------- | -------------------------------------------------------- |
+| `--color-accent`        | `#22c55e`                 | Primary CTA, "running" status, active phase, focused pin |
+| `--color-accent-hover`  | `#16a34a`                 | CTA hover                                                |
+| `--color-accent-dim`    | `#059669`                 | Pressed / accent secondary                               |
+| `--color-accent-glow`   | `rgba(34, 197, 94, 0.2)`  | Glow ring / focus halo                                   |
+| `--color-accent-bg`     | `rgba(34, 197, 94, 0.08)` | Soft fill (active nav, badges)                           |
+| `--color-accent-border` | `rgba(34, 197, 94, 0.25)` | Soft border                                              |
+
+### Semantic
+
+Each semantic color ships with a base, a soft `-bg`, and a soft `-border`.
+
+| Token             | Base      | Use                                 |
+| ----------------- | --------- | ----------------------------------- |
+| `--color-success` | `#22c55e` | Online, running, success toast      |
+| `--color-danger`  | `#ef4444` | Offline, error, destructive confirm |
+| `--color-warning` | `#f59e0b` | Approaching threshold, ID_SD pin    |
+| `--color-info`    | `#3b82f6` | 3V3 rail, info banner               |
+
+### Code / monospace
+
+| Token               | Hex                     | Role                   |
+| ------------------- | ----------------------- | ---------------------- |
+| `--color-code-bg`   | `rgba(15, 23, 42, 0.6)` | Inline code background |
+| `--color-code-text` | `#7dd3fc`               | Inline code text       |
+
+### Phase / progress tracker
+
+| Token                          | Hex       | Role                                          |
+| ------------------------------ | --------- | --------------------------------------------- |
+| `--color-phase-done`           | `#475569` | Completed phase dot (muted slate, NOT accent) |
+| `--color-phase-done-text`      | `#f1f5f9` | Done-phase label text                         |
+| `--color-phase-active`         | `#22c55e` | Current phase dot (accent)                    |
+| `--color-phase-pending-bg`     | `#1c2640` | Pending phase fill                            |
+| `--color-phase-pending-border` | `#334155` | Pending phase border                          |
+| `--color-phase-pending-text`   | `#94a3b8` | Pending phase label text                      |
+| `--color-track-bg`             | `#1c2640` | Progress track rail                           |
+| `--color-track-fill`           | `#22c55e` | Progress track fill                           |
+
+> Historical note: `phase-done` was previously `#22c55e` (same as `phase-active`) which made "done" and "active" visually indistinguishable.
+
+### Device tiles
+
+| Token                          | Hex / value               | Role               |
+| ------------------------------ | ------------------------- | ------------------ |
+| `--color-device-active-bg`     | `rgba(34, 197, 94, 0.06)` | Active tile fill   |
+| `--color-device-active-border` | `rgba(34, 197, 94, 0.35)` | Active tile border |
+
+### Bus / protocol annotations
+
+Used on the GPIO pinout diagram only.
+
+| Family | Hex                |
+| ------ | ------------------ |
+| I²C    | `#a78bfa` (purple) |
+| SPI    | `#22d3ee` (cyan)   |
+| UART   | `#fb923c` (orange) |
+| PWM    | `#2dd4bf` (teal)   |
+
+---
+
+## Typography
+
+- **Heading + body font:** Inter (self-hosted via `@fontsource/inter`)
+- **Monospace font:** JetBrains Mono (self-hosted via `@fontsource/jetbrains-mono`)
+
+Load weights 400 / 500 / 600 / 700 for Inter, 400 / 500 for JetBrains Mono. Already wired in `src/main.ts`.
+
+| Token         | Value       | Use                                   |
+| ------------- | ----------- | ------------------------------------- |
+| `--text-xs`   | `0.6875rem` | Uppercase micro labels, table headers |
+| `--text-sm`   | `0.75rem`   | Inline meta, code chips               |
+| `--text-base` | `0.8125rem` | Default body (also `body` font-size)  |
+| `--text-md`   | `0.875rem`  | Comfortable body, page subtitles      |
+| `--text-lg`   | `1rem`      | Section subheads                      |
+| `--text-xl`   | `1.125rem`  | Card titles                           |
+| `--text-2xl`  | `1.5rem`    | Page titles                           |
+
+| Token               | Value     |
+| ------------------- | --------- |
+| `--leading-tight`   | `1.25`    |
+| `--leading-normal`  | `1.5`     |
+| `--leading-relaxed` | `1.625`   |
+| `--tracking-tight`  | `-0.01em` |
+| `--tracking-normal` | `0`       |
+| `--tracking-wide`   | `0.025em` |
+| `--tracking-wider`  | `0.05em`  |
+
+---
+
+## Spacing
+
+`--space-0` through `--space-12`, step sequence 0 / 0.25 / 0.5 / 0.75 / 1 / 1.25 / 1.5 / 2 / 2.5 / 3 (`rem`). No `--space-7`, `--space-9`, or `--space-11`.
+
+| Token        | rem       | Typical use               |
+| ------------ | --------- | ------------------------- |
+| `--space-1`  | `0.25rem` | Tight gaps                |
+| `--space-2`  | `0.5rem`  | Icon gaps, inline spacing |
+| `--space-3`  | `0.75rem` | Inside cards              |
+| `--space-4`  | `1rem`    | Standard padding          |
+| `--space-6`  | `1.5rem`  | Section padding           |
+| `--space-8`  | `2rem`    | Page padding              |
+| `--space-12` | `3rem`    | Hero padding              |
+
+---
+
+## Border Radius
+
+| Token           | Value    | Use                    |
+| --------------- | -------- | ---------------------- |
+| `--radius-sm`   | `4px`    | Code chips, small tags |
+| `--radius-md`   | `6px`    | Buttons, inputs        |
+| `--radius-lg`   | `8px`    | Cards, datatables      |
+| `--radius-xl`   | `10px`   | Dialogs                |
+| `--radius-full` | `9999px` | Pills, status badges   |
+
+---
+
+## Shadow
+
+| Token                  | Value                                                              | Use                       |
+| ---------------------- | ------------------------------------------------------------------ | ------------------------- |
+| `--shadow-sm`          | `0 1px 2px 0 rgba(0,0,0,0.3)`                                      | Subtle lift               |
+| `--shadow-md`          | `0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3)`   | Cards, buttons            |
+| `--shadow-lg`          | `0 10px 15px -3px rgba(0,0,0,0.4), 0 4px 6px -4px rgba(0,0,0,0.3)` | Modals, dropdowns         |
+| `--shadow-glow`        | `0 0 12px rgba(34, 197, 94, 0.15)`                                 | Live indicator            |
+| `--shadow-glow-strong` | `0 0 20px rgba(34, 197, 94, 0.25)`                                 | Hover lift on cycle cards |
+
+---
+
+## Transitions
+
+| Token               | Value                          |
+| ------------------- | ------------------------------ |
+| `--duration-fast`   | `150ms`                        |
+| `--duration-normal` | `200ms`                        |
+| `--duration-slow`   | `300ms`                        |
+| `--ease-default`    | `cubic-bezier(0.4, 0, 0.2, 1)` |
+| `--ease-in`         | `cubic-bezier(0.4, 0, 1, 1)`   |
+| `--ease-out`        | `cubic-bezier(0, 0, 0.2, 1)`   |
+
+All transitions **must** use these tokens — never hardcode ms values.
+
+`prefers-reduced-motion: reduce` is honored in `src/assets/transitions.css` (animation/transition durations set to 0).
+
+---
+
+## Z-Index
+
+| Token          | Value  | Use                       |
+| -------------- | ------ | ------------------------- |
+| `--z-dropdown` | `50`   | Popovers, dropdown panels |
+| `--z-sticky`   | `100`  | Sticky nav, table headers |
+| `--z-overlay`  | `500`  | Confirmation masks        |
+| `--z-modal`    | `1000` | Dialogs                   |
+
+---
+
+## Focus
+
+| Token                 | Value                 |
+| --------------------- | --------------------- |
+| `--focus-ring-width`  | `2px`                 |
+| `--focus-ring-offset` | `2px`                 |
+| `--focus-ring-color`  | `var(--color-accent)` |
+
+Applied globally via `#app *:focus-visible` in `base.css`. Don't override per-component unless you have a strong reason — keyboard users depend on this being consistent.
+
+---
+
+## Component Conventions
 
 ### Buttons
 
-```css
-/* Primary Button */
-.btn-primary {
-  background: #22c55e;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
+PrimeVue `Button` is themed in `main.ts`. Use:
 
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #1e293b;
-  border: 2px solid #1e293b;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #0f172a;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
+- `severity="success"` for primary CTA (Save, Create, Add).
+- `severity="secondary"` for cancel / back.
+- `severity="danger"` only for destructive actions.
+- `severity="warn"` / `severity="info"` for contextual actions.
+- `text rounded size="small"` for table row actions (Edit, Delete).
+- `:loading="saving"` on save buttons to prevent double-submit (every form must have a `saving` ref).
 
 ### Inputs
 
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
+- `InputText`, `Select`, `MultiSelect`, `DatePicker`, `InputNumber` from PrimeVue.
+- Every form input must have a `<label for="…">` paired to its `id`.
+- `InputNumber` must declare `:min` and `:max` when the value has a sensible range (env: temp −10..50, humidity 0..100, CO₂ 0..10000).
+- Numeric precision via `:minFractionDigits` / `:maxFractionDigits`.
 
-.input:focus {
-  border-color: #1e293b;
-  outline: none;
-  box-shadow: 0 0 0 3px #1e293b20;
-}
-```
+### Cards
 
-### Modals
+PrimeVue `Card`. Sub-component sections live inside `<template #title>` and `<template #content>`.
 
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
+### Tables
 
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
+PrimeVue `DataTable` with `:value="…"` and `<Column>` children. Page size: `size="small"`. Always include an empty state for the `length === 0` case (dashed-border placeholder with icon + text).
+
+### Dialogs
+
+- `<Dialog modal dismissable-mask>`.
+- Footer: Cancel (`secondary`) on the left, primary action (`success`) on the right, both `size="small"`.
+- Destructive actions go through `<ConfirmDialog>` (`useConfirm()`), never `window.confirm()`.
+
+### Toasts
+
+- `useToast()` from PrimeVue.
+- Success: 3 s life, severity `success`.
+- Informational / warning: 6–8 s life, severity `warn` / `info`.
+- Error: 6 s life, severity `error`.
+
+### Charts
+
+- `TelemetryChart`, `DeviceHistoryChart` from `src/components/…`.
+- Chart.js via `vue-chartjs`. Dark axis/grid; accent colors for active series.
 
 ---
 
-## Style Guidelines
+## Page Patterns
 
-**Style:** Dark Mode (OLED)
+### Dashboard (`HomeView`, `/`)
 
-**Keywords:** Dark theme, low light, high contrast, deep black, midnight blue, eye-friendly, OLED, night mode, power efficient
+- Cycle cards: grid, `minmax(280px, 1fr)`, hover lift + accent border.
+- Active count badge top-right with pulsing dot.
+- Empty state: `pi pi-server` icon + onboarding nudge.
 
-**Best For:** Night-mode apps, coding platforms, entertainment, eye-strain prevention, OLED devices, low-light
+### Monitor (`GrowMonitorView`, `/grow/:id`)
 
-**Key Effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, low white emission, high readability, visible focus
+- Sticky back row + page title.
+- "Hero" status card at the top (controller status, current phase, overall progress). Don't duplicate progress elsewhere — show supplementary detail under it.
+- Cards in fixed order: Hero → Climate → Telemetry History → Devices → Device History → Phases → Environment → Automations.
 
-### Page Pattern
+### Admin (`AdminView`, `/admin`)
 
-**Pattern Name:** Horizontal Scroll Journey
+- Two sections (Controllers, Grow Cycles), each its own `Card`.
+- New-entity button in the section header.
+- Empty states when zero rows.
 
-- **Conversion Strategy:** Immersive product discovery. High engagement. Keep navigation visible.
-  28,Bento Grid Showcase,bento, grid, features, modular, apple-style, showcase", 1. Hero, 2. Bento Grid (Key Features), 3. Detail Cards, 4. Tech Specs, 5. CTA, Floating Action Button or Bottom of Grid, Card backgrounds: #F5F5F7 or Glass. Icons: Vibrant brand colors. Text: Dark., Hover card scale (1.02), video inside cards, tilt effect, staggered reveal, Scannable value props. High information density without clutter. Mobile stack.
-  29,Interactive 3D Configurator,3d, configurator, customizer, interactive, product", 1. Hero (Configurator), 2. Feature Highlight (synced), 3. Price/Specs, 4. Purchase, Inside Configurator UI + Sticky Bottom Bar, Neutral studio background. Product: Realistic materials. UI: Minimal overlay., Real-time rendering, material swap animation, camera rotate/zoom, light reflection, Increases ownership feeling. 360 view reduces return rates. Direct add-to-cart.
-  30,AI-Driven Dynamic Landing,ai, dynamic, personalized, adaptive, generative", 1. Prompt/Input Hero, 2. Generated Result Preview, 3. How it Works, 4. Value Prop, Input Field (Hero) + 'Try it' Buttons, Adaptive to user input. Dark mode for compute feel. Neon accents., Typing text effects, shimmering generation loaders, morphing layouts, Immediate value demonstration. 'Show, don't tell'. Low friction start.
-- **CTA Placement:** Floating Sticky CTA or End of Horizontal Track
-- **Section Order:** 1. Intro (Vertical), 2. The Journey (Horizontal Track), 3. Detail Reveal, 4. Vertical Footer
+### Forms (`ControllerFormView`, `GrowFormView`)
+
+- Tabs for sections (Details, Sensors, Devices / Details, Phases).
+- Save in the footer: Cancel + Save Changes / Create.
+- Staged entities (sensors, devices, phases) get atomic-create on first save.
+- `useUnsavedGuard(dirtyRef)` for navigation guard on dirty forms.
 
 ---
 
-## Anti-Patterns (Do NOT Use)
+## Anti-Patterns
 
-- ❌ Slow updates
-- ❌ No automation
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
+- ❌ **Native `window.confirm()` / `window.alert()`** — always use PrimeVue `ConfirmDialog` / `Toast`.
+- ❌ **Emojis as icons** — use `primeicons` (`pi pi-…`).
+- ❌ **Hardcoded hex values in components** — use semantic tokens.
+- ❌ **Hardcoded `transition: …ms`** — use `--duration-*` + `--ease-*`.
+- ❌ **Invisible borders** — never use a border color with <1.5:1 contrast against the surface it sits on (this is why `--color-border-subtle` was bumped from `#151d2e` → `#243049`).
+- ❌ **Layout-shifting hover** — don't use `scale()` transforms on cards.
+- ❌ **Missing `cursor: pointer`** — every clickable element must have it.
+- ❌ **Loading flags on top-level buttons only** — disable row actions too while a save is in flight.
 
 ---
 
 ## Pre-Delivery Checklist
 
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- [ ] No emojis used as icons (`pi pi-…` instead).
+- [ ] All icons from PrimeIcons; mix-and-match avoided.
+- [ ] `cursor: pointer` on every clickable element.
+- [ ] Hover states with `var(--duration-fast)` + `var(--ease-default)`.
+- [ ] Body text contrast ≥ 4.5:1 (now guaranteed by `--color-text-muted = #94a3b8`).
+- [ ] Focus ring visible (default `2px solid --color-accent` with 2px offset).
+- [ ] `prefers-reduced-motion` respected (verified by `transitions.css`).
+- [ ] No content hidden behind sticky nav (16 px `top` offset min).
+- [ ] Forms: `:loading` on save buttons, `useUnsavedGuard` for navigation, ConfirmDialog for destructive actions.
+- [ ] Empty states exist for every collection (controllers, grows, phases, sensors, devices, rules).

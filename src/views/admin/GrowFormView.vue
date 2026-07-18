@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApiStore } from '../../stores/apiStore'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import {
   AutomationMode,
   DayNightPeriod,
@@ -22,7 +23,10 @@ import type {
 import { useAutomationRuleStore } from '../../stores/automationRuleStore'
 import { computeBoundaryCoverage } from '../../composables/useEnvRuleCoverage'
 import type { EnvRuleCoverage } from '../../composables/useEnvRuleCoverage'
-import PhaseAutomationRulesDialog from '../../components/PhaseAutomationRulesDialog.vue'
+import { defineAsyncComponent } from 'vue'
+const PhaseAutomationRulesDialog = defineAsyncComponent(
+  () => import('../../components/PhaseAutomationRulesDialog.vue'),
+)
 import {
   deriveActivePhaseIndex,
   deriveGrowActive,
@@ -71,6 +75,31 @@ const phases = ref<GrowPhase[]>([])
 const ready = ref(false)
 const saving = ref(false)
 const previousActivePhaseId = ref<string | null>(null)
+const initialSnapshot = ref<string>('')
+
+function captureSnapshot() {
+  initialSnapshot.value = JSON.stringify({
+    controllerId: form.value.controllerId,
+    name: form.value.name,
+    phases: phases.value,
+    startAt: formatDate(growStartDate.value),
+  })
+}
+
+const isDirty = computed(() => {
+  if (!ready.value || !initialSnapshot.value) {
+    return false
+  }
+  return (
+    JSON.stringify({
+      controllerId: form.value.controllerId,
+      name: form.value.name,
+      phases: phases.value,
+      startAt: formatDate(growStartDate.value),
+    }) !== initialSnapshot.value
+  )
+})
+useUnsavedGuard(isDirty)
 
 function recalculateDates() {
   recalculatePhaseDates(phases.value, growStartDate.value)
@@ -167,6 +196,7 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to load form data', error)
   } finally {
+    captureSnapshot()
     ready.value = true
   }
 })
@@ -329,13 +359,39 @@ function savePhaseDraft() {
   closePhaseModal()
 }
 
+function confirmRemovePhase(index: number) {
+  const phase = phases.value[index]
+  if (!phase) {
+    return
+  }
+  const isPersisted = Boolean(phase.id)
+  const detail = isPersisted
+    ? 'This will permanently delete the phase from the server along with its environment and automation rules. This cannot be undone.'
+    : 'Remove this staged phase from the cycle? This cannot be undone.'
+  confirm.require({
+    accept: () => removePhase(index),
+    acceptLabel: 'Delete phase',
+    acceptProps: { severity: 'danger' },
+    header: `Delete "${phase.name}"`,
+    icon: 'pi pi-exclamation-triangle',
+    message: detail,
+    rejectLabel: 'Cancel',
+  })
+}
+
 async function removePhase(index: number) {
   const phase = phases.value[index]
   if (!phase) {
     return
   }
   if (phase.id) {
-    await store.deleteGrowPhase(phase.id)
+    try {
+      await store.deleteGrowPhase(phase.id)
+    } catch (error) {
+      const { message } = extractApiError(error, 'Failed to delete phase')
+      toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Delete failed' })
+      return
+    }
     if (previousActivePhaseId.value === phase.id) {
       previousActivePhaseId.value = null
     }
@@ -909,6 +965,7 @@ const handleSave = async () => {
         await savePhase(phase)
       }
       await reconcileActivePhase()
+      captureSnapshot()
       router.push('/admin')
     } else {
       let created
@@ -956,6 +1013,7 @@ const handleSave = async () => {
         return
       }
       await reconcileActivePhase()
+      captureSnapshot()
       router.push(`/admin/grows/edit/${created.id}`)
     }
   } catch (error) {
@@ -1124,7 +1182,7 @@ function fmtTime(dayStartMinutes: number): string {
                           size="small"
                           aria-label="Delete phase"
                           v-tooltip.top="'Delete phase'"
-                          @click.stop="removePhase(phases.indexOf(slotProps.data))"
+                          @click.stop="confirmRemovePhase(phases.indexOf(slotProps.data))"
                         />
                       </div>
                     </template>
@@ -1333,17 +1391,41 @@ function fmtTime(dayStartMinutes: number): string {
               <div class="field-row-3">
                 <div class="field">
                   <label class="field-label">Min</label>
-                  <InputNumber v-model="envDraftFor(period).tempMin" placeholder="e.g. 18" />
+                  <InputNumber
+                    v-model="envDraftFor(period).tempMin"
+                    placeholder="e.g. 18"
+                    :min="-10"
+                    :max="50"
+                    :step="0.5"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
-                  <InputNumber v-model="envDraftFor(period).tempTarget" placeholder="e.g. 22" />
+                  <InputNumber
+                    v-model="envDraftFor(period).tempTarget"
+                    placeholder="e.g. 22"
+                    :min="-10"
+                    :max="50"
+                    :step="0.5"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
-                  <InputNumber v-model="envDraftFor(period).tempMax" placeholder="e.g. 28" />
+                  <InputNumber
+                    v-model="envDraftFor(period).tempMax"
+                    placeholder="e.g. 28"
+                    :min="-10"
+                    :max="50"
+                    :step="0.5"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
@@ -1353,17 +1435,41 @@ function fmtTime(dayStartMinutes: number): string {
               <div class="field-row-3">
                 <div class="field">
                   <label class="field-label">Min</label>
-                  <InputNumber v-model="envDraftFor(period).humidityMin" placeholder="e.g. 50" />
+                  <InputNumber
+                    v-model="envDraftFor(period).humidityMin"
+                    placeholder="e.g. 50"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
-                  <InputNumber v-model="envDraftFor(period).humidityTarget" placeholder="e.g. 65" />
+                  <InputNumber
+                    v-model="envDraftFor(period).humidityTarget"
+                    placeholder="e.g. 65"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
-                  <InputNumber v-model="envDraftFor(period).humidityMax" placeholder="e.g. 80" />
+                  <InputNumber
+                    v-model="envDraftFor(period).humidityMax"
+                    placeholder="e.g. 80"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    :minFractionDigits="0"
+                    :maxFractionDigits="1"
+                  />
                   <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
@@ -1373,17 +1479,35 @@ function fmtTime(dayStartMinutes: number): string {
               <div class="field-row-3">
                 <div class="field">
                   <label class="field-label">Min</label>
-                  <InputNumber v-model="envDraftFor(period).co2Min" placeholder="e.g. 800" />
+                  <InputNumber
+                    v-model="envDraftFor(period).co2Min"
+                    placeholder="e.g. 800"
+                    :min="0"
+                    :max="10000"
+                    :step="50"
+                  />
                   <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Target</label>
-                  <InputNumber v-model="envDraftFor(period).co2Target" placeholder="e.g. 1200" />
+                  <InputNumber
+                    v-model="envDraftFor(period).co2Target"
+                    placeholder="e.g. 1200"
+                    :min="0"
+                    :max="10000"
+                    :step="50"
+                  />
                   <small class="field-micro-hint">Stored; not used by automation</small>
                 </div>
                 <div class="field">
                   <label class="field-label">Max</label>
-                  <InputNumber v-model="envDraftFor(period).co2Max" placeholder="e.g. 1500" />
+                  <InputNumber
+                    v-model="envDraftFor(period).co2Max"
+                    placeholder="e.g. 1500"
+                    :min="0"
+                    :max="10000"
+                    :step="50"
+                  />
                   <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
               </div>
