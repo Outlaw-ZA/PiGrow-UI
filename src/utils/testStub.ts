@@ -23,18 +23,120 @@ const InputNumberStub = defineComponent({
   },
 })
 
+// PrimeVue InputText/MultiSelect read $primevue.config during render; stubbing
+// them with `true` still instantiates the real template which throws in tests.
+const InputTextStub = defineComponent({
+  name: 'InputTextStub',
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () =>
+      h('input', {
+        onInput: (event: Event) =>
+          emit('update:modelValue', (event.target as HTMLInputElement).value),
+        value: String(props.modelValue ?? ''),
+      })
+  },
+})
+
+const MultiSelectStub = defineComponent({
+  name: 'MultiSelectStub',
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'multi-select-stub' }, slots.default?.() ?? [])
+  },
+})
+
+// PrimeVue's Tabs/TabList/TabPanels components use a context-injected active
+// value to decide which TabPanel to show. A `true` stub drops the default slot
+// entirely, hiding every panel; a passthrough stub at least lets the test
+// exercise the slots and find the Add Device button.
+const TabsStub = defineComponent({
+  name: 'TabsStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'tabs-stub' }, slots.default?.() ?? [])
+  },
+})
+
+const TabPanelsStub = defineComponent({
+  name: 'TabPanelsStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'tab-panels-stub' }, slots.default?.() ?? [])
+  },
+})
+
+// PrimeVue's DataTable sets up internal watchers on its `value` prop; the
+// default `true` stub still instantiates that machinery and triggers an
+// "Maximum recursive updates exceeded" loop when the test mutates the array
+// backing the prop. This passthrough stub renders the default slot without
+// any reactive prop bookkeeping, so tests can keep mutating the array freely.
+const DataTableStub = defineComponent({
+  name: 'DataTableStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'data-table-stub' }, slots.default?.() ?? [])
+  },
+})
+
+const ColumnStub = defineComponent({
+  name: 'ColumnStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'column-stub' }, slots.default?.() ?? [])
+  },
+})
+
+// ConfirmDialog reads $primevue config during render; a `true` stub still
+// instantiates the real template and explodes. A noop component keeps the
+// mount quiet while leaving the dialog's <ConfirmDialog /> child slot empty.
+const ConfirmDialogStub = defineComponent({
+  name: 'ConfirmDialogStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'confirm-dialog-stub' }, slots.default?.() ?? [])
+  },
+})
+
 // `defineComponent` returns a `DefineComponent` whose signature is wider than
 // the `true | ConcreteComponent` shape that `@vue/test-utils` accepts in its
 // stubs map. Cast to the structural type so the stubs are usable in tests.
 export const primeVueStubs: Record<string, true | ConcreteComponent> = {
+  Accordion: true,
+  AccordionContent: true,
+  AccordionHeader: true,
+  AccordionPanel: true,
   Button: true,
+  Column: ColumnStub as unknown as ConcreteComponent,
+  ConfirmDialog: ConfirmDialogStub as unknown as ConcreteComponent,
+  DataTable: DataTableStub as unknown as ConcreteComponent,
   Dialog: DialogStub as unknown as ConcreteComponent,
   InputNumber: InputNumberStub as unknown as ConcreteComponent,
+  InputText: InputTextStub as unknown as ConcreteComponent,
   Message: true,
+  MultiSelect: MultiSelectStub as unknown as ConcreteComponent,
   Select: true,
+  Tab: true,
+  TabList: true,
+  TabPanel: true,
+  TabPanels: TabPanelsStub as unknown as ConcreteComponent,
+  Tabs: TabsStub as unknown as ConcreteComponent,
+  Tag: true,
+  'primevue/accordion': true,
+  'primevue/accordioncontent': true,
+  'primevue/accordionheader': true,
+  'primevue/accordionpanel': true,
   'primevue/button': true,
+  'primevue/column': ColumnStub as unknown as ConcreteComponent,
+  'primevue/confirmdialog': ConfirmDialogStub as unknown as ConcreteComponent,
+  'primevue/datatable': DataTableStub as unknown as ConcreteComponent,
   'primevue/dialog': DialogStub as unknown as ConcreteComponent,
   'primevue/inputnumber': InputNumberStub as unknown as ConcreteComponent,
+  'primevue/inputtext': InputTextStub as unknown as ConcreteComponent,
   'primevue/message': true,
+  'primevue/multiselect': MultiSelectStub as unknown as ConcreteComponent,
   'primevue/select': true,
+  'primevue/tab': true,
+  'primevue/tablist': true,
+  'primevue/tabpanel': true,
+  'primevue/tabpanels': TabPanelsStub as unknown as ConcreteComponent,
+  'primevue/tabs': TabsStub as unknown as ConcreteComponent,
+  'primevue/tag': true,
 }

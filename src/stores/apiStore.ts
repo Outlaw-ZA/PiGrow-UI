@@ -32,6 +32,7 @@ export const useApiStore = defineStore('api', () => {
 
   return {
     activateGrowPhase: growPhaseStore.activateGrowPhase,
+    claimController: controllerStore.claimController,
     controllers,
     createController: controllerStore.createController,
     createDevice: deviceStore.createDevice,
@@ -68,6 +69,7 @@ export const useApiStore = defineStore('api', () => {
     growCycles,
     loading,
     pollDevices: deviceStore.pollDevices,
+    scanControllers: controllerStore.scanControllers,
     sendDeviceCommand: deviceStore.sendDeviceCommand,
     skipGrowPhase: growCycleStore.skipGrowPhase,
     stopDevicePolling: deviceStore.stopDevicePolling,

@@ -21,7 +21,14 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import Toast from 'primevue/toast'
+import { useDevicePresence } from './composables/useDevicePresence'
+
+const presence = useDevicePresence()
+onMounted(() => {
+  presence.start()
+})
 </script>
 
 <style scoped>

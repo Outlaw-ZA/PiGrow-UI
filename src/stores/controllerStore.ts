@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
-import type { Controller, SensorSeed } from '../types/grow'
+import type {
+  ClaimRequest,
+  ClaimResponse,
+  Controller,
+  ScanResponse,
+  SensorSeed,
+} from '../types/grow'
 import { API_BASE } from './apiBase'
 
 export interface CreateControllerPayload {
@@ -48,13 +54,32 @@ export const useControllerStore = defineStore('controller', () => {
     return res.data as Controller
   }
 
+  async function scanControllers() {
+    const res = await axios.get(`${API_BASE}/controllers/scan`)
+    return res.data as ScanResponse
+  }
+
+  async function claimController(payload: ClaimRequest) {
+    const res = await axios.post(`${API_BASE}/controllers/claim`, payload)
+    const claimed = (res.data as ClaimResponse).controller
+    const idx = controllers.value.findIndex((c) => c.id === claimed.id)
+    if (idx !== -1) {
+      controllers.value[idx] = claimed
+    } else {
+      controllers.value.push(claimed)
+    }
+    return claimed
+  }
+
   return {
+    claimController,
     controllers,
     createController,
     deleteController,
     fetchAll,
     fetchController,
     loading,
+    scanControllers,
     updateController,
   }
 })

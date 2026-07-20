@@ -80,6 +80,55 @@ export interface DeviceSeed {
   pinNumber: number
   automationMode?: AutomationMode
   isActive?: boolean
+  maxOnSeconds?: number | null
+}
+
+export interface HardwareManifestSensor {
+  type: string
+  protocol: string
+  i2cBus?: number
+  i2cAddr?: number
+  pin?: number
+  interval: number
+}
+
+export interface HardwareManifestRelay {
+  type: string
+  pin: number
+  name?: string
+}
+
+export interface HardwareManifest {
+  sensors: HardwareManifestSensor[]
+  relays: HardwareManifestRelay[]
+}
+
+export interface DiscoveredController {
+  mac: string
+  ip: string
+  serial: string
+  fwVersion: string
+  pinActive: boolean
+  hwManifest: HardwareManifest
+}
+
+export interface ScanResponse {
+  controllers: DiscoveredController[]
+}
+
+export interface ClaimRequest {
+  mac: string
+  claimPin: string
+  name: string
+}
+
+export interface ClaimResponse {
+  controller: Controller
+}
+
+export interface DeviceStateUpdate {
+  deviceId: string
+  isActive: boolean
 }
 
 export interface Sensor {

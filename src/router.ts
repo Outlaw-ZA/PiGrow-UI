@@ -7,6 +7,7 @@ import NotFoundView from './views/NotFoundView.vue'
 
 // Controller Views
 import ControllerFormView from './views/admin/ControllerFormView.vue'
+import ScanControllersView from './views/admin/ScanControllersView.vue'
 // Grow Views
 import GrowFormView from './views/admin/GrowFormView.vue'
 
@@ -23,6 +24,11 @@ const router = createRouter({
       name: 'controller-edit',
       path: '/admin/controllers/edit/:id',
       props: true,
+    },
+    {
+      component: ScanControllersView,
+      name: 'controller-scan',
+      path: '/admin/controllers/scan',
     },
 
     // Grow Lifecycle Subroutes

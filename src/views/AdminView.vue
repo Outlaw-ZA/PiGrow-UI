@@ -85,13 +85,23 @@ async function deleteGrowCycle(id: string, name: string) {
       <template #title>
         <div class="section-header">
           <span>Controllers</span>
-          <Button
-            label="New Controller"
-            icon="pi pi-plus"
-            size="small"
-            severity="success"
-            @click="router.push('/admin/controllers/new')"
-          />
+          <div class="header-actions">
+            <Button
+              label="Scan for Controllers"
+              icon="pi pi-wifi"
+              size="small"
+              severity="info"
+              outlined
+              @click="router.push('/admin/controllers/scan')"
+            />
+            <Button
+              label="New Controller"
+              icon="pi pi-plus"
+              size="small"
+              severity="success"
+              @click="router.push('/admin/controllers/new')"
+            />
+          </div>
         </div>
       </template>
       <template #content>
@@ -135,7 +145,10 @@ async function deleteGrowCycle(id: string, name: string) {
 
         <div v-else class="empty-state">
           <span class="pi pi-server empty-icon"></span>
-          <p>No controllers registered yet. Click <strong>New Controller</strong> to add one.</p>
+          <p>
+            No controllers registered yet. Click <strong>Scan for Controllers</strong> to claim a
+            new Pi over the LAN, or <strong>New Controller</strong> to add one by hand.
+          </p>
         </div>
       </template>
     </Card>
@@ -223,6 +236,12 @@ async function deleteGrowCycle(id: string, name: string) {
   justify-content: space-between;
   align-items: center;
   width: 100%;
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .row-actions {

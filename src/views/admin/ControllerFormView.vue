@@ -18,6 +18,7 @@ import type { CreateControllerPayload } from '../../stores/controllerStore'
 import { extractApiError } from '../../utils/errors'
 import { useToast } from 'primevue/usetoast'
 import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import DataTable from 'primevue/datatable'
@@ -275,6 +276,7 @@ const editingDeviceIsLive = ref(false)
 const deviceForm = ref({
   automationMode: AutomationMode.MANUAL,
   isActive: true,
+  maxOnSeconds: null as number | null,
   name: '',
   pinNumber: null as number | null,
   type: DeviceType.LIGHT,
@@ -337,6 +339,7 @@ function openAddDevice() {
   deviceForm.value = {
     automationMode: AutomationMode.MANUAL,
     isActive: true,
+    maxOnSeconds: null,
     name: '',
     pinNumber: null,
     type: DeviceType.LIGHT,
@@ -351,6 +354,7 @@ function openEditDevice(device: Device | StagedDevice) {
   deviceForm.value = {
     automationMode: device.automationMode ?? AutomationMode.MANUAL,
     isActive: device.isActive ?? true,
+    maxOnSeconds: device.maxOnSeconds ?? null,
     name: device.name,
     pinNumber: device.pinNumber,
     type: device.type,
@@ -379,6 +383,10 @@ async function saveDevice() {
   const payload: DeviceSeed = {
     automationMode: deviceForm.value.automationMode,
     isActive: deviceForm.value.isActive,
+    maxOnSeconds:
+      deviceForm.value.maxOnSeconds !== null && Number.isFinite(deviceForm.value.maxOnSeconds)
+        ? deviceForm.value.maxOnSeconds
+        : null,
     name: deviceForm.value.name.trim(),
     pinNumber: deviceForm.value.pinNumber,
     type: deviceForm.value.type,
@@ -521,6 +529,7 @@ async function handleSave() {
           stagedDevices.value.map((d) => ({
             automationMode: d.automationMode,
             isActive: d.isActive,
+            maxOnSeconds: d.maxOnSeconds ?? null,
             name: d.name,
             pinNumber: d.pinNumber,
             type: d.type,
@@ -1015,6 +1024,24 @@ async function handleSave() {
           </div>
         </div>
 
+        <div class="field">
+          <label for="dev-max-on" class="field-label">
+            Max Continuous ON (seconds)
+            <span class="field-hint"
+              >— optional safety ceiling; leave empty for the server default</span
+            >
+          </label>
+          <InputNumber
+            id="dev-max-on"
+            v-model="deviceForm.maxOnSeconds"
+            :data-testid="'dev-max-on'"
+            :min="0"
+            :max="86400"
+            placeholder="e.g. 3600"
+            class="full-width"
+          />
+        </div>
+
         <Accordion v-model:value="openDevicePinoutPanels" class="pinout-accordion">
           <AccordionPanel value="pinout">
             <AccordionHeader>
@@ -1127,6 +1154,13 @@ async function handleSave() {
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-text-secondary);
+}
+
+.field-hint {
+  font-weight: 400;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-left: var(--space-2);
 }
 
 .full-width {
