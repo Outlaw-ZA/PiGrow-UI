@@ -221,6 +221,26 @@ async function deleteGrowCycle(id: string, name: string) {
         </div>
       </template>
     </Card>
+
+    <Card>
+      <template #title>
+        <div class="section-header">
+          <span>Nutrients</span>
+          <Button
+            label="Manage Nutrients"
+            icon="pi pi-plus"
+            size="small"
+            severity="success"
+            @click="router.push('/admin/nutrients')"
+          />
+        </div>
+      </template>
+      <template #content>
+        <p class="nutrient-description">
+          Maintain your nutrient library (FloraMicro, CalMag, etc.) for use across grow phases.
+        </p>
+      </template>
+    </Card>
   </div>
 </template>
 
@@ -284,6 +304,12 @@ async function deleteGrowCycle(id: string, name: string) {
 
 .empty-state p {
   margin: 0;
+  font-size: var(--text-md);
+}
+
+.nutrient-description {
+  margin: 0;
+  color: var(--color-text-secondary);
   font-size: var(--text-md);
 }
 </style>

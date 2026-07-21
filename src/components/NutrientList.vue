@@ -35,13 +35,6 @@ function onRemove(nutrient: Nutrient) {
     <Column field="name" header="Name" sortable style="font-weight: 600">
       <template #body="slotProps">
         <span>{{ slotProps.data.name }}</span>
-        <Tag
-          v-if="slotProps.data.notes"
-          :value="'notes'"
-          severity="secondary"
-          rounded
-          class="nutrient-notes-tag"
-        />
       </template>
     </Column>
     <Column field="brand" header="Brand" sortable>
