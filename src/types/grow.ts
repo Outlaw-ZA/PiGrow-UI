@@ -203,6 +203,9 @@ export interface PhaseEnvironment {
   co2Min: number | null
   co2Max: number | null
   co2Target: number | null
+  phMin: number | null
+  phMax: number | null
+  phTarget: number | null
   createdAt: string
   updatedAt: string
 }
@@ -217,6 +220,9 @@ export interface PhaseEnvironmentPayload {
   co2Min?: number | null
   co2Max?: number | null
   co2Target?: number | null
+  phMin?: number | null
+  phMax?: number | null
+  phTarget?: number | null
 }
 
 export interface GrowPhase {

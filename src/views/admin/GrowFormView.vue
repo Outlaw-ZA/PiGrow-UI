@@ -596,6 +596,9 @@ function emptyEnvPayload(): PhaseEnvironmentPayload {
     humidityMax: null,
     humidityMin: null,
     humidityTarget: null,
+    phMax: null,
+    phMin: null,
+    phTarget: null,
     tempMax: null,
     tempMin: null,
     tempTarget: null,
@@ -616,6 +619,9 @@ function envPayloadFromCache(env: PhaseEnvironment | null): PhaseEnvironmentPayl
     humidityMax: env?.humidityMax ?? null,
     humidityMin: env?.humidityMin ?? null,
     humidityTarget: env?.humidityTarget ?? null,
+    phMax: env?.phMax ?? null,
+    phMin: env?.phMin ?? null,
+    phTarget: env?.phTarget ?? null,
     tempMax: env?.tempMax ?? null,
     tempMin: env?.tempMin ?? null,
     tempTarget: env?.tempTarget ?? null,
@@ -631,6 +637,14 @@ async function openEnvDialog(phase: GrowPhase) {
     const cache = getEnvCache(phase)
     envDraftDay.value = envPayloadFromCache(cache.day)
     envDraftNight.value = envPayloadFromCache(cache.night)
+    // pH defaults from DAY: when NIGHT has no row yet but DAY is configured
+    // with pH values, seed the NIGHT pH inputs so the user only overrides
+    // what's actually different (temp/humidity/co2 stay null).
+    if (cache.night === null && cache.day !== null) {
+      envDraftNight.value.phMin = cache.day.phMin
+      envDraftNight.value.phTarget = cache.day.phTarget
+      envDraftNight.value.phMax = cache.day.phMax
+    }
   } finally {
     envDialogLoading.value = false
   }
@@ -1551,6 +1565,50 @@ function fmtTime(dayStartMinutes: number): string {
                     :min="0"
                     :max="10000"
                     :step="50"
+                  />
+                  <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
+                </div>
+              </div>
+            </div>
+            <div class="env-form-fields">
+              <h6 class="env-form-subtitle">pH</h6>
+              <div class="field-row-3">
+                <div class="field">
+                  <label class="field-label">Min</label>
+                  <InputNumber
+                    v-model="envDraftFor(period).phMin"
+                    placeholder="e.g. 5.8"
+                    :min="0"
+                    :max="14"
+                    :step="0.01"
+                    :minFractionDigits="2"
+                    :maxFractionDigits="2"
+                  />
+                  <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
+                </div>
+                <div class="field">
+                  <label class="field-label">Target</label>
+                  <InputNumber
+                    v-model="envDraftFor(period).phTarget"
+                    placeholder="e.g. 6.2"
+                    :min="0"
+                    :max="14"
+                    :step="0.01"
+                    :minFractionDigits="2"
+                    :maxFractionDigits="2"
+                  />
+                  <small class="field-micro-hint">Stored; not used by automation</small>
+                </div>
+                <div class="field">
+                  <label class="field-label">Max</label>
+                  <InputNumber
+                    v-model="envDraftFor(period).phMax"
+                    placeholder="e.g. 6.5"
+                    :min="0"
+                    :max="14"
+                    :step="0.01"
+                    :minFractionDigits="2"
+                    :maxFractionDigits="2"
                   />
                   <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
                 </div>
