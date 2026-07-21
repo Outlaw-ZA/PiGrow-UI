@@ -7,6 +7,13 @@ const DialogStub = defineComponent({
   },
 })
 
+const MessageStub = defineComponent({
+  name: 'MessageStub',
+  setup(_props, { slots }) {
+    return () => h('div', { class: 'message-stub' }, slots.default?.())
+  },
+})
+
 const InputNumberStub = defineComponent({
   name: 'InputNumberStub',
   props: ['dataTestid', 'modelValue'],
@@ -141,7 +148,7 @@ export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   InputNumber: InputNumberStub as unknown as ConcreteComponent,
   InputSwitch: InputSwitchStub as unknown as ConcreteComponent,
   InputText: InputTextStub as unknown as ConcreteComponent,
-  Message: true,
+  Message: MessageStub as unknown as ConcreteComponent,
   MultiSelect: MultiSelectStub as unknown as ConcreteComponent,
   Select: true,
   Tab: true,
@@ -162,7 +169,7 @@ export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   'primevue/inputnumber': InputNumberStub as unknown as ConcreteComponent,
   'primevue/inputswitch': InputSwitchStub as unknown as ConcreteComponent,
   'primevue/inputtext': InputTextStub as unknown as ConcreteComponent,
-  'primevue/message': true,
+  'primevue/message': MessageStub as unknown as ConcreteComponent,
   'primevue/multiselect': MultiSelectStub as unknown as ConcreteComponent,
   'primevue/select': true,
   'primevue/tab': true,

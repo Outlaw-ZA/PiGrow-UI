@@ -30,6 +30,9 @@ const PhaseAutomationRulesDialog = defineAsyncComponent(
 const PhaseNutrientList = defineAsyncComponent(
   () => import('../../components/PhaseNutrientList.vue'),
 )
+const DosingCalculatorDialog = defineAsyncComponent(
+  () => import('../../components/DosingCalculatorDialog.vue'),
+)
 import {
   deriveActivePhaseIndex,
   deriveGrowActive,
@@ -707,7 +710,17 @@ const envIsSaving = computed(() => {
 const ruleStore = useAutomationRuleStore()
 
 const showRulesDialog = ref(false)
+const showDosingCalculator = ref(false)
+const dosingCalculatorPhase = ref<GrowPhase | null>(null)
 const rulesEditingPhase = ref<GrowPhase | null>(null)
+
+function openDosingCalculator(phase: GrowPhase) {
+  if (!phase.id) {
+    return
+  }
+  dosingCalculatorPhase.value = phase
+  showDosingCalculator.value = true
+}
 const rulesLoading = ref(false)
 const phaseRules = ref<Record<string, AutomationRule[]>>({})
 
@@ -1253,7 +1266,17 @@ function fmtTime(dayStartMinutes: number): string {
                         Save the grow to enable dosing.
                       </span>
                     </div>
-                    <PhaseNutrientList :grow-phase-id="phase.id ?? ''" />
+                    <div class="nutrient-phase-actions">
+                      <PhaseNutrientList :grow-phase-id="phase.id ?? ''" />
+                      <Button
+                        label="Calculator"
+                        icon="pi pi-calculator"
+                        size="small"
+                        severity="info"
+                        :disabled="!phase.id"
+                        @click="openDosingCalculator(phase)"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1640,6 +1663,11 @@ function fmtTime(dayStartMinutes: number): string {
       :phase="rulesEditingPhase"
       :devices="controllerDevices"
       @changed="onRulesChanged"
+    />
+    <DosingCalculatorDialog
+      v-if="dosingCalculatorPhase?.id"
+      v-model="showDosingCalculator"
+      :grow-phase-id="dosingCalculatorPhase.id"
     />
   </div>
 </template>

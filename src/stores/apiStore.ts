@@ -8,6 +8,28 @@ import { usePhaseNutrientStore } from './phaseNutrientStore'
 import { useSensorStore } from './sensorStore'
 import { useTelemetryStore } from './telemetryStore'
 import { useAutomationRuleStore } from './automationRuleStore'
+import axios from 'axios'
+import { API_BASE } from './apiBase'
+
+type DosingPeriod = 'DAY' | 'NIGHT'
+export type DosingWarningCode =
+  | 'NO_NUTRIENTS_CONFIGURED'
+  | 'NO_DAY_NUTRIENTS'
+  | 'NO_NIGHT_NUTRIENTS'
+  | 'NO_PH_BANDS'
+  | 'PH_DAY_NIGHT_MISMATCH'
+  | 'RESERVOIR_TOO_SMALL'
+
+export interface DosingPreviewPayload {
+  reservoirLiters: number
+  period: DosingPeriod
+}
+
+export interface DosingPreviewResponse {
+  mlByNutrientId: Record<string, number>
+  totalMl: number
+  warnings: DosingWarningCode[]
+}
 
 export const useApiStore = defineStore('api', () => {
   const controllerStore = useControllerStore()
@@ -19,6 +41,13 @@ export const useApiStore = defineStore('api', () => {
   const sensorStore = useSensorStore()
   const telemetryStore = useTelemetryStore()
   const automationRuleStore = useAutomationRuleStore()
+
+  async function previewDosing(growPhaseId: string, payload: DosingPreviewPayload) {
+    const res = await axios.post(`${API_BASE}/grow-phases/${growPhaseId}/dosing/preview`, payload)
+    return res.data as DosingPreviewResponse
+  }
+
+  const dosing = { preview: previewDosing }
 
   const { controllers, loading } = storeToRefs(controllerStore)
   const { growCycles } = storeToRefs(growCycleStore)
@@ -58,6 +87,7 @@ export const useApiStore = defineStore('api', () => {
     deleteNutrient: nutrientStore.deleteNutrient,
     deletePhaseEnvironment: growPhaseStore.deletePhaseEnvironment,
     deleteRule: automationRuleStore.deleteRule,
+    dosing,
     deleteSensor: sensorStore.deleteSensor,
     endGrow: growCycleStore.endGrow,
     extendActivePhase: growCycleStore.extendActivePhase,
