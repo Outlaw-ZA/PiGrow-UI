@@ -48,6 +48,22 @@ const MultiSelectStub = defineComponent({
   },
 })
 
+const InputSwitchStub = defineComponent({
+  name: 'InputSwitchStub',
+  props: ['modelValue', 'disabled'],
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () =>
+      h('input', {
+        checked: Boolean(props.modelValue),
+        disabled: props.disabled,
+        onChange: (event: Event) =>
+          emit('update:modelValue', (event.target as HTMLInputElement).checked),
+        type: 'checkbox',
+      })
+  },
+})
+
 const TextareaStub = defineComponent({
   name: 'TextareaStub',
   props: ['modelValue'],
@@ -123,6 +139,7 @@ export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   DataTable: DataTableStub as unknown as ConcreteComponent,
   Dialog: DialogStub as unknown as ConcreteComponent,
   InputNumber: InputNumberStub as unknown as ConcreteComponent,
+  InputSwitch: InputSwitchStub as unknown as ConcreteComponent,
   InputText: InputTextStub as unknown as ConcreteComponent,
   Message: true,
   MultiSelect: MultiSelectStub as unknown as ConcreteComponent,
@@ -143,6 +160,7 @@ export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   'primevue/datatable': DataTableStub as unknown as ConcreteComponent,
   'primevue/dialog': DialogStub as unknown as ConcreteComponent,
   'primevue/inputnumber': InputNumberStub as unknown as ConcreteComponent,
+  'primevue/inputswitch': InputSwitchStub as unknown as ConcreteComponent,
   'primevue/inputtext': InputTextStub as unknown as ConcreteComponent,
   'primevue/message': true,
   'primevue/multiselect': MultiSelectStub as unknown as ConcreteComponent,

@@ -27,6 +27,9 @@ import { defineAsyncComponent } from 'vue'
 const PhaseAutomationRulesDialog = defineAsyncComponent(
   () => import('../../components/PhaseAutomationRulesDialog.vue'),
 )
+const PhaseNutrientList = defineAsyncComponent(
+  () => import('../../components/PhaseNutrientList.vue'),
+)
 import {
   deriveActivePhaseIndex,
   deriveGrowActive,
@@ -226,7 +229,7 @@ function isPhaseActive(phase: GrowPhase): boolean {
   return sortedPhases.value[activeIdx] === phase
 }
 
-const activeTab = ref<'details' | 'phases'>('details')
+const activeTab = ref<'details' | 'phases' | 'nutrients'>('details')
 
 const showPhaseModal = ref(false)
 const editingPhaseIndex = ref<number | null>(null)
@@ -1048,6 +1051,10 @@ function fmtTime(dayStartMinutes: number): string {
               <i class="pi pi-list" />
               <span>Phases</span>
             </Tab>
+            <Tab value="nutrients">
+              <i class="pi pi-flask" />
+              <span>Nutrient Dosing</span>
+            </Tab>
           </TabList>
           <TabPanels>
             <TabPanel value="details">
@@ -1197,6 +1204,43 @@ function fmtTime(dayStartMinutes: number): string {
                 <div v-if="phases.length > 0" class="total-summary">
                   <span class="total-label">Total Cycle Duration</span>
                   <span class="total-value">{{ totalCycleDays }} days</span>
+                </div>
+              </div>
+            </TabPanel>
+
+            <TabPanel value="nutrients">
+              <div class="tab-section">
+                <div class="section-toolbar">
+                  <h3 class="section-title">Nutrient Dosing per Phase</h3>
+                  <span class="section-hint">
+                    Configure which nutrients to dose during DAY and NIGHT for each phase.
+                  </span>
+                </div>
+
+                <div v-if="phases.length === 0" class="empty-state">
+                  <span class="pi pi-list empty-icon" />
+                  <p>Add at least one phase to configure nutrient dosing.</p>
+                </div>
+
+                <div v-else class="nutrient-phase-stack">
+                  <div
+                    v-for="phase in sortedPhases"
+                    :key="phase.localKey ?? phase.id ?? phase.name"
+                    class="nutrient-phase-block"
+                  >
+                    <div class="nutrient-phase-header">
+                      <span class="nutrient-phase-order">#{{ phase.order }}</span>
+                      <span class="nutrient-phase-name">{{ phase.name }}</span>
+                      <span
+                        v-if="!phase.id"
+                        class="nutrient-phase-locked"
+                        data-testid="phase-unsaved"
+                      >
+                        Save the grow to enable dosing.
+                      </span>
+                    </div>
+                    <PhaseNutrientList :grow-phase-id="phase.id ?? ''" />
+                  </div>
                 </div>
               </div>
             </TabPanel>

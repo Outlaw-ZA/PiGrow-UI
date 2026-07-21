@@ -328,6 +328,31 @@ export interface UpdateNutrientPayload {
   notes?: string | null
 }
 
+export interface PhaseNutrient {
+  id: string
+  growPhaseId: string
+  nutrientId: string
+  period: DayNightPeriod
+  doseMlPerL: number
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreatePhaseNutrientPayload {
+  nutrientId: string
+  period: DayNightPeriod
+  doseMlPerL: number
+  sortOrder?: number
+}
+
+export interface UpdatePhaseNutrientPayload {
+  nutrientId?: string
+  period?: DayNightPeriod
+  doseMlPerL?: number
+  sortOrder?: number
+}
+
 export interface UICommand {
   deviceId: string
   action: 'ON' | 'OFF'

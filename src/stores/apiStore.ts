@@ -4,6 +4,7 @@ import { useDeviceStore } from './deviceStore'
 import { useGrowCycleStore } from './growCycleStore'
 import { useGrowPhaseStore } from './growPhaseStore'
 import { useNutrientStore } from './nutrientStore'
+import { usePhaseNutrientStore } from './phaseNutrientStore'
 import { useSensorStore } from './sensorStore'
 import { useTelemetryStore } from './telemetryStore'
 import { useAutomationRuleStore } from './automationRuleStore'
@@ -14,6 +15,7 @@ export const useApiStore = defineStore('api', () => {
   const growCycleStore = useGrowCycleStore()
   const growPhaseStore = useGrowPhaseStore()
   const nutrientStore = useNutrientStore()
+  const phaseNutrientStore = usePhaseNutrientStore()
   const sensorStore = useSensorStore()
   const telemetryStore = useTelemetryStore()
   const automationRuleStore = useAutomationRuleStore()
@@ -79,6 +81,12 @@ export const useApiStore = defineStore('api', () => {
     growCycles,
     loading,
     nutrients,
+    phaseNutrients: {
+      addOne: phaseNutrientStore.addOne,
+      fetchForPhase: phaseNutrientStore.fetchForPhase,
+      removeOne: phaseNutrientStore.removeOne,
+      updateOne: phaseNutrientStore.updateOne,
+    },
     pollDevices: deviceStore.pollDevices,
     scanControllers: controllerStore.scanControllers,
     sendDeviceCommand: deviceStore.sendDeviceCommand,
