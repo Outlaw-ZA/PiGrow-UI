@@ -2021,4 +2021,10 @@ function fmtTime(dayStartMinutes: number): string {
 .env-coverage-list li {
   margin: 0.125rem 0;
 }
+
+.nutrient-phase-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
 </style>

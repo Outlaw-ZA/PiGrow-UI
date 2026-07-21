@@ -7,6 +7,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { useApiStore } from '../stores/apiStore'
 import { useNutrientStore } from '../stores/nutrientStore'
+import { extractApiError } from '../utils/errors'
 
 type Period = 'DAY' | 'NIGHT'
 type WarningCode =
@@ -32,6 +33,7 @@ const reservoirLiters = ref(1)
 const period = ref<Period>('DAY')
 const loading = ref(false)
 const result = ref<DosingPreviewResult | null>(null)
+const error = ref<string | null>(null)
 
 const periodOptions = [
   { label: 'Day', value: 'DAY' as const },
@@ -56,12 +58,16 @@ const rows = computed(() =>
 )
 
 async function calculate() {
+  error.value = null
   loading.value = true
   try {
     result.value = await apiStore.dosing.preview(props.growPhaseId, {
       period: period.value,
       reservoirLiters: reservoirLiters.value,
     })
+  } catch (err) {
+    const { message } = extractApiError(err, 'Failed to calculate dosing')
+    error.value = message
   } finally {
     loading.value = false
   }
@@ -107,6 +113,7 @@ async function calculate() {
         :loading="loading"
         @click="calculate"
       />
+      <Message v-if="error" severity="error">{{ error }}</Message>
 
       <section v-if="result" data-testid="dosing-results" class="dosing-results">
         <div v-if="rows.length" class="dosing-rows">
