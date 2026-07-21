@@ -11,6 +11,9 @@
         <router-link to="/admin" class="nav-link" active-class="active-link"
           >Administration</router-link
         >
+        <router-link to="/admin/nutrients" class="nav-link" active-class="active-link"
+          >Nutrients</router-link
+        >
       </div>
     </nav>
     <main class="content">

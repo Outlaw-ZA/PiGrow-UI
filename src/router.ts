@@ -10,6 +10,8 @@ import ControllerFormView from './views/admin/ControllerFormView.vue'
 import ScanControllersView from './views/admin/ScanControllersView.vue'
 // Grow Views
 import GrowFormView from './views/admin/GrowFormView.vue'
+// Nutrient Views
+import NutrientsView from './views/admin/Nutrients.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -40,6 +42,9 @@ const router = createRouter({
       path: '/grow/:id',
       props: true, // Pass the :id parameter down into the component as a native prop
     },
+
+    // Nutrient Lifecycle Subroutes
+    { component: NutrientsView, name: 'nutrients', path: '/admin/nutrients' },
 
     // Catch-all
     {

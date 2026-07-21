@@ -307,6 +307,27 @@ export interface FrontendTelemetry {
   timestamp: string
 }
 
+export interface Nutrient {
+  id: string
+  name: string
+  brand: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateNutrientPayload {
+  name: string
+  brand?: string | null
+  notes?: string | null
+}
+
+export interface UpdateNutrientPayload {
+  name?: string
+  brand?: string | null
+  notes?: string | null
+}
+
 export interface UICommand {
   deviceId: string
   action: 'ON' | 'OFF'

@@ -3,6 +3,7 @@ import { useControllerStore } from './controllerStore'
 import { useDeviceStore } from './deviceStore'
 import { useGrowCycleStore } from './growCycleStore'
 import { useGrowPhaseStore } from './growPhaseStore'
+import { useNutrientStore } from './nutrientStore'
 import { useSensorStore } from './sensorStore'
 import { useTelemetryStore } from './telemetryStore'
 import { useAutomationRuleStore } from './automationRuleStore'
@@ -12,12 +13,14 @@ export const useApiStore = defineStore('api', () => {
   const deviceStore = useDeviceStore()
   const growCycleStore = useGrowCycleStore()
   const growPhaseStore = useGrowPhaseStore()
+  const nutrientStore = useNutrientStore()
   const sensorStore = useSensorStore()
   const telemetryStore = useTelemetryStore()
   const automationRuleStore = useAutomationRuleStore()
 
   const { controllers, loading } = storeToRefs(controllerStore)
   const { growCycles } = storeToRefs(growCycleStore)
+  const { nutrients } = storeToRefs(nutrientStore)
 
   async function fetchAll() {
     loading.value = true
@@ -30,6 +33,10 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
+  async function fetchNutrients() {
+    return nutrientStore.fetchAll()
+  }
+
   return {
     activateGrowPhase: growPhaseStore.activateGrowPhase,
     claimController: controllerStore.claimController,
@@ -39,12 +46,14 @@ export const useApiStore = defineStore('api', () => {
     createDevicesBatch: deviceStore.createDevicesBatch,
     createGrowCycle: growCycleStore.createGrowCycle,
     createGrowPhase: growPhaseStore.createGrowPhase,
+    createNutrient: nutrientStore.createNutrient,
     createRule: automationRuleStore.createRule,
     createSensor: sensorStore.createSensor,
     deleteController: controllerStore.deleteController,
     deleteDevice: deviceStore.deleteDevice,
     deleteGrowCycle: growCycleStore.deleteGrowCycle,
     deleteGrowPhase: growPhaseStore.deleteGrowPhase,
+    deleteNutrient: nutrientStore.deleteNutrient,
     deletePhaseEnvironment: growPhaseStore.deletePhaseEnvironment,
     deleteRule: automationRuleStore.deleteRule,
     deleteSensor: sensorStore.deleteSensor,
@@ -56,6 +65,7 @@ export const useApiStore = defineStore('api', () => {
     fetchDevices: deviceStore.fetchDevices,
     fetchGrowCycle: growCycleStore.fetchGrowCycle,
     fetchLatestTelemetry: telemetryStore.fetchLatestTelemetry,
+    fetchNutrients,
     fetchPhaseEnvironment: growPhaseStore.fetchPhaseEnvironment,
     fetchPhases: growPhaseStore.fetchPhases,
     fetchRulesByCycle: automationRuleStore.fetchRulesByCycle,
@@ -68,6 +78,7 @@ export const useApiStore = defineStore('api', () => {
     findDeviceOnController: deviceStore.findDeviceOnController,
     growCycles,
     loading,
+    nutrients,
     pollDevices: deviceStore.pollDevices,
     scanControllers: controllerStore.scanControllers,
     sendDeviceCommand: deviceStore.sendDeviceCommand,
@@ -79,6 +90,7 @@ export const useApiStore = defineStore('api', () => {
     updateDeviceInCache: deviceStore.updateDeviceInCache,
     updateGrowCycle: growCycleStore.updateGrowCycle,
     updateGrowPhase: growPhaseStore.updateGrowPhase,
+    updateNutrient: nutrientStore.updateNutrient,
     updateRule: automationRuleStore.updateRule,
     updateSensor: sensorStore.updateSensor,
     upsertPhaseEnvironment: growPhaseStore.upsertPhaseEnvironment,

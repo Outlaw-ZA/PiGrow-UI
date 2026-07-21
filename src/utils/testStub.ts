@@ -48,6 +48,20 @@ const MultiSelectStub = defineComponent({
   },
 })
 
+const TextareaStub = defineComponent({
+  name: 'TextareaStub',
+  props: ['modelValue'],
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () =>
+      h('textarea', {
+        onInput: (event: Event) =>
+          emit('update:modelValue', (event.target as HTMLTextAreaElement).value),
+        value: String(props.modelValue ?? ''),
+      })
+  },
+})
+
 // PrimeVue's Tabs/TabList/TabPanels components use a context-injected active
 // value to decide which TabPanel to show. A `true` stub drops the default slot
 // entirely, hiding every panel; a passthrough stub at least lets the test
@@ -139,4 +153,6 @@ export const primeVueStubs: Record<string, true | ConcreteComponent> = {
   'primevue/tabpanels': TabPanelsStub as unknown as ConcreteComponent,
   'primevue/tabs': TabsStub as unknown as ConcreteComponent,
   'primevue/tag': true,
+  'primevue/textarea': TextareaStub as unknown as ConcreteComponent,
+  Textarea: TextareaStub as unknown as ConcreteComponent,
 }
