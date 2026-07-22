@@ -82,12 +82,11 @@ function nameFor(nutrientId: string): string {
   return nutrientById.value.get(nutrientId)?.name ?? nutrientId
 }
 
-function nextSortOrder(nutrientId: string): number {
-  const existing = phaseNutrients.value.filter((pn) => pn.nutrientId === nutrientId)
-  if (existing.length === 0) {
+function nextSortOrder(): number {
+  if (phaseNutrients.value.length === 0) {
     return 1
   }
-  return Math.max(...existing.map((pn) => pn.sortOrder)) + 1
+  return Math.max(...phaseNutrients.value.map((pn) => pn.sortOrder)) + 1
 }
 
 async function loadForPhase() {
@@ -145,7 +144,7 @@ async function saveDialog() {
       const createPayload: CreatePhaseNutrientPayload = {
         doseMlPerL: draftDose.value,
         nutrientId: draftNutrientId.value,
-        sortOrder: nextSortOrder(draftNutrientId.value),
+        sortOrder: nextSortOrder(),
       }
       const created = await store.phaseNutrients.addOne(props.growPhaseId, createPayload)
       toast.add({
@@ -231,7 +230,7 @@ defineExpose({
     <Card class="phase-card">
       <template #title>
         <div class="phase-header">
-          <Tag value="pH-WIDE" severity="success" rounded />
+          <Tag value="PHASE-WIDE" severity="success" rounded />
           <span class="phase-title">Phase nutrient dosing</span>
           <Button
             label="Add"

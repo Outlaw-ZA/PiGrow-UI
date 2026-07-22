@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import InputNumber from 'primevue/inputnumber'
 import type { GrowPhase } from '../types/grow'
 import { useApiStore } from '../stores/apiStore'
@@ -7,6 +7,7 @@ import { extractApiError } from '../utils/errors'
 import { useToast } from 'primevue/usetoast'
 
 const props = defineProps<{ phase: GrowPhase }>()
+const emit = defineEmits<{ updated: [phase: GrowPhase] }>()
 
 const store = useApiStore()
 const toast = useToast()
@@ -16,25 +17,29 @@ const phTarget = ref<number | null>(props.phase.phTarget ?? null)
 const phMax = ref<number | null>(props.phase.phMax ?? null)
 const saving = ref(false)
 
+const DEBOUNCE_MS = 350
+type PhField = 'phMin' | 'phTarget' | 'phMax'
+const debounceTimers: Partial<Record<PhField, ReturnType<typeof setTimeout>>> = {}
+const pendingFields: Partial<Record<PhField, number | null>> = {}
+
 watch(
   () => [props.phase.id, props.phase.phMin, props.phase.phTarget, props.phase.phMax] as const,
   ([id, min, target, max]) => {
-    if (id !== props.phase.id) {
-      return
-    }
+    void id
     phMin.value = min ?? null
     phTarget.value = target ?? null
     phMax.value = max ?? null
   },
 )
 
-async function persist(field: 'phMin' | 'phTarget' | 'phMax', value: number | null) {
+async function persist(field: PhField, value: number | null) {
   if (!props.phase.id) {
     return
   }
   saving.value = true
   try {
-    await store.updateGrowPhase(props.phase.id, { [field]: value })
+    const updated = await store.updateGrowPhase(props.phase.id, { [field]: value })
+    emit('updated', updated)
   } catch (error) {
     const { message } = extractApiError(error, 'Failed to save pH band')
     toast.add({ detail: message, life: 6000, severity: 'error', summary: 'Save failed' })
@@ -42,6 +47,28 @@ async function persist(field: 'phMin' | 'phTarget' | 'phMax', value: number | nu
     saving.value = false
   }
 }
+
+function schedulePersist(field: PhField, value: number | null) {
+  pendingFields[field] = value
+  const existing = debounceTimers[field]
+  if (existing) {
+    clearTimeout(existing)
+  }
+  debounceTimers[field] = setTimeout(() => {
+    const next = pendingFields[field] ?? null
+    delete pendingFields[field]
+    delete debounceTimers[field]
+    void persist(field, next)
+  }, DEBOUNCE_MS)
+}
+
+onBeforeUnmount(() => {
+  for (const timer of Object.values(debounceTimers)) {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+})
 </script>
 
 <template>
@@ -69,7 +96,7 @@ async function persist(field: 'phMin' | 'phTarget' | 'phMax', value: number | nu
             placeholder="e.g. 5.8"
             show-buttons
             class="full-width"
-            @update:model-value="(v) => persist('phMin', v ?? null)"
+            @update:model-value="(v) => schedulePersist('phMin', v ?? null)"
           />
           <small class="field-micro-hint">Acceptable lower bound</small>
         </div>
@@ -87,7 +114,7 @@ async function persist(field: 'phMin' | 'phTarget' | 'phMax', value: number | nu
             placeholder="e.g. 6.2"
             show-buttons
             class="full-width"
-            @update:model-value="(v) => persist('phTarget', v ?? null)"
+            @update:model-value="(v) => schedulePersist('phTarget', v ?? null)"
           />
           <small class="field-micro-hint">Stored; not used by automation</small>
         </div>
@@ -105,7 +132,7 @@ async function persist(field: 'phMin' | 'phTarget' | 'phMax', value: number | nu
             placeholder="e.g. 6.5"
             show-buttons
             class="full-width"
-            @update:model-value="(v) => persist('phMax', v ?? null)"
+            @update:model-value="(v) => schedulePersist('phMax', v ?? null)"
           />
           <small class="field-micro-hint">Acceptable upper bound</small>
         </div>

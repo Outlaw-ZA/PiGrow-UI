@@ -431,6 +431,18 @@ async function removePhase(index: number) {
   recalculateDates()
 }
 
+function mergePhaseFromEditor(updated: GrowPhase) {
+  const idx = phases.value.findIndex(
+    (p) =>
+      (updated.id && p.id === updated.id) ||
+      (p.localKey && updated.localKey && p.localKey === updated.localKey),
+  )
+  if (idx === -1) {
+    return
+  }
+  phases.value[idx] = { ...phases.value[idx], ...updated }
+}
+
 const phaseDraftStartHours = ref(6)
 const phaseDraftStartMinutes = ref(0)
 
@@ -1289,7 +1301,7 @@ function fmtTime(dayStartMinutes: number): string {
                       />
                     </div>
                     <div class="nutrient-phase-ph">
-                      <PhasePhBandEditor :phase="phase" />
+                      <PhasePhBandEditor :phase="phase" @updated="mergePhaseFromEditor" />
                     </div>
                   </div>
                 </div>

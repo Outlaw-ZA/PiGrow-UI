@@ -392,4 +392,52 @@ describe('PhaseNutrientList', () => {
 
     expect(w.get('[data-testid="pn-add"]').attributes('disabled')).toBeDefined()
   })
+
+  it('renders the card header with the "PHASE-WIDE" tag value', async () => {
+    const TagStub = defineComponent({
+      name: 'TagStub',
+      props: ['value'],
+      setup(props) {
+        return () => h('span', { 'data-testid': 'phase-tag' }, String(props.value ?? ''))
+      },
+    })
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: { ...primeVueStubs, Tag: TagStub } },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    expect(w.find('[data-testid="phase-tag"]').text()).toBe('PHASE-WIDE')
+  })
+
+  it('places a newly-added nutrient at the end of the existing sort order', async () => {
+    phaseNutrients = [
+      {
+        createdAt: '2026-07-21T00:00:00.000Z',
+        doseMlPerL: 1,
+        growPhaseId: 'p1',
+        id: 'pn1',
+        nutrientId: 'nut1',
+        sortOrder: 5,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      },
+    ]
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: { ...primeVueStubs, Select: SelectStub } },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    await w.get('[data-testid="pn-add"]').trigger('click')
+    await flush()
+
+    setSelectValue(w, 'nut2')
+    setDoseValue(w, '2.5')
+    await flush()
+    await w.get('[data-testid="pn-save"]').trigger('click')
+    await flush()
+
+    expect(recordedCreates.length).toBe(1)
+    expect(recordedCreates[0]!.sortOrder).toBe(6)
+  })
 })

@@ -22,8 +22,11 @@ const InputNumberStub = defineComponent({
     return () =>
       h('input', {
         'data-testid': props.dataTestid,
-        onInput: (event: Event) =>
-          emit('update:modelValue', Number((event.target as HTMLInputElement).value)),
+        onInput: (event: Event) => {
+          const raw = (event.target as HTMLInputElement).value.trim()
+          const next = raw === '' ? null : Number(raw)
+          emit('update:modelValue', next)
+        },
         type: 'number',
         value: String(props.modelValue ?? ''),
       })
