@@ -20,6 +20,9 @@ function makePhase(over: Partial<GrowPhase> = {}): GrowPhase {
     isActive: true,
     name: 'Vegetative',
     order: 0,
+    phMax: null,
+    phMin: null,
+    phTarget: null,
     startAt: '2026-07-16',
     ...over,
   }

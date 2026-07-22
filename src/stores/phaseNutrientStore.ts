@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
-import { DayNightPeriod } from '../types/grow'
 import type {
   CreatePhaseNutrientPayload,
   PhaseNutrient,
@@ -37,13 +36,10 @@ export const usePhaseNutrientStore = defineStore('phaseNutrient', () => {
     )
   }
 
-  async function fetchForPhase(growPhaseId: string, period?: DayNightPeriod) {
+  async function fetchForPhase(growPhaseId: string) {
     loading.value = true
     try {
-      const params = period ? { period } : {}
-      const res = await axios.get(`${API_BASE}/grow-phases/${growPhaseId}/phase-nutrients`, {
-        params,
-      })
+      const res = await axios.get(`${API_BASE}/grow-phases/${growPhaseId}/phase-nutrients`)
       const list = res.data as PhaseNutrient[]
       setForPhase(growPhaseId, list)
       return list

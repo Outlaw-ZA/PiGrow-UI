@@ -203,9 +203,6 @@ export interface PhaseEnvironment {
   co2Min: number | null
   co2Max: number | null
   co2Target: number | null
-  phMin: number | null
-  phMax: number | null
-  phTarget: number | null
   createdAt: string
   updatedAt: string
 }
@@ -220,9 +217,6 @@ export interface PhaseEnvironmentPayload {
   co2Min?: number | null
   co2Max?: number | null
   co2Target?: number | null
-  phMin?: number | null
-  phMax?: number | null
-  phTarget?: number | null
 }
 
 export interface GrowPhase {
@@ -236,6 +230,9 @@ export interface GrowPhase {
   isActive: boolean
   startAt: string | null
   endAt: string | null
+  phMin: number | null
+  phTarget: number | null
+  phMax: number | null
   environments?: PhaseEnvironment[]
   createdAt?: string
   updatedAt?: string
@@ -338,7 +335,6 @@ export interface PhaseNutrient {
   id: string
   growPhaseId: string
   nutrientId: string
-  period: DayNightPeriod
   doseMlPerL: number
   sortOrder: number
   createdAt: string
@@ -347,14 +343,11 @@ export interface PhaseNutrient {
 
 export interface CreatePhaseNutrientPayload {
   nutrientId: string
-  period: DayNightPeriod
   doseMlPerL: number
   sortOrder?: number
 }
 
 export interface UpdatePhaseNutrientPayload {
-  nutrientId?: string
-  period?: DayNightPeriod
   doseMlPerL?: number
   sortOrder?: number
 }

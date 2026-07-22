@@ -24,7 +24,6 @@ interface TestPhaseNutrient {
   id: string
   growPhaseId: string
   nutrientId: string
-  period: 'DAY' | 'NIGHT'
   doseMlPerL: number
   sortOrder: number
   createdAt: string
@@ -52,6 +51,20 @@ const nutrients: TestNutrient[] = [
 
 let phaseNutrients: TestPhaseNutrient[] = []
 
+interface CreateRecord {
+  nutrientId: string
+  doseMlPerL: number
+  sortOrder?: number
+}
+
+interface UpdateRecord {
+  doseMlPerL?: number
+  sortOrder?: number
+}
+
+const recordedCreates: CreateRecord[] = []
+const recordedUpdates: UpdateRecord[] = []
+
 vi.mock('../stores/apiStore', () => ({
   useApiStore: () => ({
     get nutrients(): TestNutrient[] {
@@ -62,6 +75,11 @@ vi.mock('../stores/apiStore', () => ({
         _growPhaseId: string,
         payload: Omit<TestPhaseNutrient, 'id' | 'createdAt' | 'updatedAt'>,
       ) => {
+        recordedCreates.push({
+          doseMlPerL: payload.doseMlPerL,
+          nutrientId: payload.nutrientId,
+          sortOrder: payload.sortOrder,
+        })
         const created: TestPhaseNutrient = {
           ...payload,
           createdAt: '2026-07-21T00:00:00.000Z',
@@ -71,8 +89,7 @@ vi.mock('../stores/apiStore', () => ({
         phaseNutrients.push(created)
         return Promise.resolve(created)
       },
-      fetchForPhase: (_growPhaseId: string, _period?: 'DAY' | 'NIGHT') =>
-        Promise.resolve(phaseNutrients),
+      fetchForPhase: (_growPhaseId: string) => Promise.resolve(phaseNutrients),
       removeOne: (_growPhaseId: string, id: string) => {
         phaseNutrients = phaseNutrients.filter((pn) => pn.id !== id)
         return Promise.resolve()
@@ -82,6 +99,10 @@ vi.mock('../stores/apiStore', () => ({
         id: string,
         payload: Partial<Omit<TestPhaseNutrient, 'id' | 'createdAt' | 'updatedAt'>>,
       ) => {
+        recordedUpdates.push({
+          doseMlPerL: payload.doseMlPerL,
+          sortOrder: payload.sortOrder,
+        })
         const idx = phaseNutrients.findIndex((pn) => pn.id === id)
         if (idx !== -1) {
           phaseNutrients[idx] = { ...phaseNutrients[idx]!, ...payload } as TestPhaseNutrient
@@ -93,6 +114,7 @@ vi.mock('../stores/apiStore', () => ({
   }),
 }))
 
+import { defineComponent, h } from 'vue'
 import PhaseNutrientList from './PhaseNutrientList.vue'
 import { primeVueStubs } from '../utils/testStub'
 
@@ -102,10 +124,54 @@ const flush = async () => {
   await Promise.resolve()
 }
 
+const SelectStub = defineComponent({
+  name: 'SelectStub',
+  props: ['modelValue', 'options', 'optionLabel', 'optionValue'],
+  emits: ['update:modelValue'],
+  setup(_props, { emit }) {
+    return () => {
+      const options = _props.options as Array<{ id: string; name: string }> | undefined
+      const optionValue = (_props.optionValue as string) || 'id'
+      return h(
+        'select',
+        {
+          'data-testid': 'pn-nutrient-select',
+          onChange: (e: Event) => {
+            const value = (e.target as HTMLSelectElement).value
+            emit('update:modelValue', value || null)
+          },
+        },
+        [
+          h('option', { disabled: true, value: '' }, 'Select'),
+          ...(options ?? []).map((o) =>
+            h('option', { value: o[optionValue as keyof typeof o] as string }, o.name),
+          ),
+        ],
+      )
+    }
+  },
+})
+
+function setSelectValue(wrapper: VueWrapper, value: string) {
+  const select = wrapper.get('[data-testid="pn-nutrient-select"]')
+  const selectEl = select.element as unknown as HTMLSelectElement
+  selectEl.value = value
+  selectEl.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function setDoseValue(wrapper: VueWrapper, value: string) {
+  const input = wrapper.get('[data-testid="pn-dose"]')
+  const inputEl = input.element as unknown as HTMLInputElement
+  inputEl.value = value
+  inputEl.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 describe('PhaseNutrientList', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     phaseNutrients = []
+    recordedCreates.length = 0
+    recordedUpdates.length = 0
     useConfirmMock.require.mockReset()
   })
 
@@ -132,7 +198,7 @@ describe('PhaseNutrientList', () => {
     expect(w.text()).toMatch(/no nutrients configured/i)
   })
 
-  it('renders phase nutrient rows with resolved nutrient name, dose, and period chip', async () => {
+  it('renders a single shared list of phase nutrient rows with resolved nutrient name and dose', async () => {
     phaseNutrients = [
       {
         createdAt: '2026-07-21T00:00:00.000Z',
@@ -140,8 +206,16 @@ describe('PhaseNutrientList', () => {
         growPhaseId: 'p1',
         id: 'pn1',
         nutrientId: 'nut1',
-        period: 'DAY',
         sortOrder: 1,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      },
+      {
+        createdAt: '2026-07-21T00:00:00.000Z',
+        doseMlPerL: 3,
+        growPhaseId: 'p1',
+        id: 'pn2',
+        nutrientId: 'nut2',
+        sortOrder: 2,
         updatedAt: '2026-07-21T00:00:00.000Z',
       },
     ]
@@ -152,31 +226,11 @@ describe('PhaseNutrientList', () => {
     await flush()
 
     expect(w.text()).toContain('FloraGro')
-    expect(w.text()).toContain('2.5')
-    expect(w.text()).toContain('DAY')
-  })
-
-  it('renders a NIGHT row with the resolved name', async () => {
-    phaseNutrients = [
-      {
-        createdAt: '2026-07-21T00:00:00.000Z',
-        doseMlPerL: 3,
-        growPhaseId: 'p1',
-        id: 'pn9',
-        nutrientId: 'nut2',
-        period: 'NIGHT',
-        sortOrder: 1,
-        updatedAt: '2026-07-21T00:00:00.000Z',
-      },
-    ]
-    const w = mount(PhaseNutrientList, {
-      global: { stubs: primeVueStubs },
-      props: { growPhaseId: 'p1' },
-    })
-    await flush()
-
     expect(w.text()).toContain('FloraBloom')
-    expect(w.text()).toContain('NIGHT')
+    expect(w.text()).toContain('2.5')
+    expect(w.text()).toContain('3')
+    expect(w.text()).not.toMatch(/DAY/i)
+    expect(w.text()).not.toMatch(/NIGHT/i)
   })
 
   it('renders edit and delete actions for each row', async () => {
@@ -187,7 +241,6 @@ describe('PhaseNutrientList', () => {
         growPhaseId: 'p1',
         id: 'pn1',
         nutrientId: 'nut1',
-        period: 'DAY',
         sortOrder: 1,
         updatedAt: '2026-07-21T00:00:00.000Z',
       },
@@ -202,8 +255,7 @@ describe('PhaseNutrientList', () => {
     expect(w.find('[data-testid="pn-delete-pn1"]').exists()).toBe(true)
   })
 
-  it('disables the "both periods" toggle when every available nutrient already has both periods', async () => {
-    // Both nutrients have BOTH DAY and NIGHT entries — nothing left to add
+  it('does not render a period chip or DAY/NIGHT toggle', async () => {
     phaseNutrients = [
       {
         createdAt: '2026-07-21T00:00:00.000Z',
@@ -211,7 +263,114 @@ describe('PhaseNutrientList', () => {
         growPhaseId: 'p1',
         id: 'pn1',
         nutrientId: 'nut1',
-        period: 'DAY',
+        sortOrder: 1,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      },
+    ]
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: primeVueStubs },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    expect(w.find('[data-testid="pn-both-toggle"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pn-period-pn1"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pn-add-day"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pn-add-night"]').exists()).toBe(false)
+  })
+
+  it('sends a periodless create payload when adding a nutrient', async () => {
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: { ...primeVueStubs, Select: SelectStub } },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    await w.get('[data-testid="pn-add"]').trigger('click')
+    await flush()
+
+    setSelectValue(w, 'nut1')
+    setDoseValue(w, '2.5')
+    await flush()
+
+    await w.get('[data-testid="pn-save"]').trigger('click')
+    await flush()
+
+    expect(recordedCreates.length).toBe(1)
+    const payload = recordedCreates[0] as unknown as Record<string, unknown>
+    expect(payload).not.toHaveProperty('period')
+    expect(payload.doseMlPerL).toBe(2.5)
+    expect(payload.nutrientId).toBe('nut1')
+  })
+
+  it('sends a periodless update payload when editing a row', async () => {
+    phaseNutrients = [
+      {
+        createdAt: '2026-07-21T00:00:00.000Z',
+        doseMlPerL: 1,
+        growPhaseId: 'p1',
+        id: 'pn1',
+        nutrientId: 'nut1',
+        sortOrder: 1,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      },
+    ]
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: { ...primeVueStubs, Select: SelectStub } },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    await w.get('[data-testid="pn-edit-pn1"]').trigger('click')
+    await flush()
+
+    setDoseValue(w, '4.0')
+    await flush()
+
+    await w.get('[data-testid="pn-save"]').trigger('click')
+    await flush()
+
+    expect(recordedUpdates.length).toBe(1)
+    const payload = recordedUpdates[0] as unknown as Record<string, unknown>
+    expect(payload).not.toHaveProperty('period')
+    expect(payload.doseMlPerL).toBe(4)
+  })
+
+  it('hides nutrient options that are already added to the phase', async () => {
+    phaseNutrients = [
+      {
+        createdAt: '2026-07-21T00:00:00.000Z',
+        doseMlPerL: 1,
+        growPhaseId: 'p1',
+        id: 'pn1',
+        nutrientId: 'nut1',
+        sortOrder: 1,
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      },
+    ]
+    const w = mount(PhaseNutrientList, {
+      global: { stubs: { ...primeVueStubs, Select: SelectStub } },
+      props: { growPhaseId: 'p1' },
+    })
+    await flush()
+
+    await w.get('[data-testid="pn-add"]').trigger('click')
+    await flush()
+
+    const select = w.get('[data-testid="pn-nutrient-select"]')
+    const optionValues = select.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).not.toContain('nut1')
+    expect(optionValues).toContain('nut2')
+  })
+
+  it('disables the Add button when every nutrient is already added', async () => {
+    phaseNutrients = [
+      {
+        createdAt: '2026-07-21T00:00:00.000Z',
+        doseMlPerL: 1,
+        growPhaseId: 'p1',
+        id: 'pn1',
+        nutrientId: 'nut1',
         sortOrder: 1,
         updatedAt: '2026-07-21T00:00:00.000Z',
       },
@@ -220,29 +379,8 @@ describe('PhaseNutrientList', () => {
         doseMlPerL: 1,
         growPhaseId: 'p1',
         id: 'pn2',
-        nutrientId: 'nut1',
-        period: 'NIGHT',
-        sortOrder: 1,
-        updatedAt: '2026-07-21T00:00:00.000Z',
-      },
-      {
-        createdAt: '2026-07-21T00:00:00.000Z',
-        doseMlPerL: 1,
-        growPhaseId: 'p1',
-        id: 'pn3',
         nutrientId: 'nut2',
-        period: 'DAY',
-        sortOrder: 1,
-        updatedAt: '2026-07-21T00:00:00.000Z',
-      },
-      {
-        createdAt: '2026-07-21T00:00:00.000Z',
-        doseMlPerL: 1,
-        growPhaseId: 'p1',
-        id: 'pn4',
-        nutrientId: 'nut2',
-        period: 'NIGHT',
-        sortOrder: 1,
+        sortOrder: 2,
         updatedAt: '2026-07-21T00:00:00.000Z',
       },
     ]
@@ -252,33 +390,6 @@ describe('PhaseNutrientList', () => {
     })
     await flush()
 
-    const toggle = w.find('[data-testid="pn-both-toggle"]')
-    expect(toggle.exists()).toBe(true)
-    expect(toggle.attributes('disabled')).toBeDefined()
-  })
-
-  it('enables the "both periods" toggle when at least one nutrient is missing a period', async () => {
-    // nut1 has only DAY entry; nut2 has nothing
-    phaseNutrients = [
-      {
-        createdAt: '2026-07-21T00:00:00.000Z',
-        doseMlPerL: 1,
-        growPhaseId: 'p1',
-        id: 'pn1',
-        nutrientId: 'nut1',
-        period: 'DAY',
-        sortOrder: 1,
-        updatedAt: '2026-07-21T00:00:00.000Z',
-      },
-    ]
-    const w = mount(PhaseNutrientList, {
-      global: { stubs: primeVueStubs },
-      props: { growPhaseId: 'p1' },
-    })
-    await flush()
-
-    const toggle = w.find('[data-testid="pn-both-toggle"]')
-    expect(toggle.exists()).toBe(true)
-    expect(toggle.attributes('disabled')).toBeUndefined()
+    expect(w.get('[data-testid="pn-add"]').attributes('disabled')).toBeDefined()
   })
 })

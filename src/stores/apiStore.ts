@@ -11,18 +11,10 @@ import { useAutomationRuleStore } from './automationRuleStore'
 import axios from 'axios'
 import { API_BASE } from './apiBase'
 
-type DosingPeriod = 'DAY' | 'NIGHT'
-export type DosingWarningCode =
-  | 'NO_NUTRIENTS_CONFIGURED'
-  | 'NO_DAY_NUTRIENTS'
-  | 'NO_NIGHT_NUTRIENTS'
-  | 'NO_PH_BANDS'
-  | 'PH_DAY_NIGHT_MISMATCH'
-  | 'RESERVOIR_TOO_SMALL'
+export type DosingWarningCode = 'NO_NUTRIENTS_CONFIGURED' | 'NO_PH_BANDS' | 'RESERVOIR_TOO_SMALL'
 
 export interface DosingPreviewPayload {
   reservoirLiters: number
-  period: DosingPeriod
 }
 
 export interface DosingPreviewResponse {

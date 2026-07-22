@@ -2,21 +2,13 @@
 import { computed, ref } from 'vue'
 import Dialog from 'primevue/dialog'
 import InputNumber from 'primevue/inputnumber'
-import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { useApiStore } from '../stores/apiStore'
 import { useNutrientStore } from '../stores/nutrientStore'
 import { extractApiError } from '../utils/errors'
 
-type Period = 'DAY' | 'NIGHT'
-type WarningCode =
-  | 'NO_NUTRIENTS_CONFIGURED'
-  | 'NO_DAY_NUTRIENTS'
-  | 'NO_NIGHT_NUTRIENTS'
-  | 'NO_PH_BANDS'
-  | 'PH_DAY_NIGHT_MISMATCH'
-  | 'RESERVOIR_TOO_SMALL'
+type WarningCode = 'NO_NUTRIENTS_CONFIGURED' | 'NO_PH_BANDS' | 'RESERVOIR_TOO_SMALL'
 
 interface DosingPreviewResult {
   mlByNutrientId: Record<string, number>
@@ -30,21 +22,13 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const apiStore = useApiStore()
 const nutrientStore = useNutrientStore()
 const reservoirLiters = ref(1)
-const period = ref<Period>('DAY')
 const loading = ref(false)
 const result = ref<DosingPreviewResult | null>(null)
 const error = ref<string | null>(null)
 
-const periodOptions = [
-  { label: 'Day', value: 'DAY' as const },
-  { label: 'Night', value: 'NIGHT' as const },
-]
 const warningText: Record<WarningCode, string> = {
   NO_NUTRIENTS_CONFIGURED: 'No nutrients configured for this phase.',
-  NO_DAY_NUTRIENTS: 'No nutrients configured for the DAY period.',
-  NO_NIGHT_NUTRIENTS: 'No nutrients configured for the NIGHT period.',
-  NO_PH_BANDS: "No pH bands configured for this period. Auto-dosing won't correct drift.",
-  PH_DAY_NIGHT_MISMATCH: 'DAY and NIGHT pH bands differ. Review before relying on auto-dosing.',
+  NO_PH_BANDS: "No pH bands configured for this phase. Auto-dosing won't correct drift.",
   RESERVOIR_TOO_SMALL: 'Reservoir volume must be > 0.',
 }
 
@@ -62,7 +46,6 @@ async function calculate() {
   loading.value = true
   try {
     result.value = await apiStore.dosing.preview(props.growPhaseId, {
-      period: period.value,
       reservoirLiters: reservoirLiters.value,
     })
   } catch (err) {
@@ -79,32 +62,20 @@ async function calculate() {
     :visible="props.modelValue"
     header="Dosing Calculator"
     modal
-    :style="{ width: '90vw', maxWidth: '560px' }"
+    :style="{ width: '90vw', maxWidth: '480px' }"
     @update:visible="emit('update:modelValue', $event)"
   >
     <div class="form-stack">
-      <div class="field-row-2">
-        <div class="field">
-          <label for="dosing-reservoir" class="field-label">Reservoir (liters)</label>
-          <InputNumber
-            inputId="dosing-reservoir"
-            data-testid="reservoir-liters"
-            v-model="reservoirLiters"
-            :min="0"
-            :max="100000"
-            :step="0.1"
-          />
-        </div>
-        <div class="field">
-          <label for="dosing-period" class="field-label">Period</label>
-          <Select
-            inputId="dosing-period"
-            v-model="period"
-            :options="periodOptions"
-            option-label="label"
-            option-value="value"
-          />
-        </div>
+      <div class="field">
+        <label for="dosing-reservoir" class="field-label">Reservoir (liters)</label>
+        <InputNumber
+          inputId="dosing-reservoir"
+          data-testid="reservoir-liters"
+          v-model="reservoirLiters"
+          :min="0"
+          :max="100000"
+          :step="0.1"
+        />
       </div>
       <Button
         label="Calculate"
@@ -122,7 +93,7 @@ async function calculate() {
             <strong>{{ row.ml.toFixed(2) }} ml</strong>
           </div>
         </div>
-        <p v-else class="muted">No nutrient dosing configured for this period.</p>
+        <p v-else class="muted">No nutrient dosing configured for this phase.</p>
         <span data-testid="dosing-total" class="dosing-total">
           Total: {{ result.totalMl.toFixed(2) }} ml
         </span>
@@ -138,3 +109,56 @@ async function calculate() {
     </div>
   </Dialog>
 </template>
+
+<style scoped>
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-label {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.dosing-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dosing-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dosing-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.dosing-total {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+</style>

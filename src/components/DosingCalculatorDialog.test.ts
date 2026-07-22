@@ -33,15 +33,43 @@ describe('DosingCalculatorDialog', () => {
     await wrapper.get('[data-testid="calculate-dosing"]').trigger('click')
 
     expect(apiStore.dosing.preview).toHaveBeenCalledWith('test-phase', {
-      period: 'DAY',
       reservoirLiters: 10,
     })
     expect(wrapper.get('[data-testid="dosing-results"]').text()).toContain('Grow A')
     expect(wrapper.get('[data-testid="dosing-results"]').text()).toContain('12.35 ml')
     expect(wrapper.get('[data-testid="dosing-results"]').text()).toContain('Bloom B')
     expect(wrapper.get('[data-testid="dosing-total"]').text()).toContain('18.35 ml')
-    expect(wrapper.get('[data-testid="dosing-warning"]').text()).toContain(
-      'No pH bands configured for this period.',
-    )
+    expect(wrapper.get('[data-testid="dosing-warning"]').text()).toContain('No pH bands configured')
+  })
+
+  it('does not expose a period selector (DAY/NIGHT are not user-facing)', () => {
+    const wrapper = mount(DosingCalculatorDialog, {
+      global: { stubs: primeVueStubs },
+      props: { growPhaseId: 'test-phase', modelValue: true },
+    })
+    expect(wrapper.find('[data-testid="dosing-period"]').exists()).toBe(false)
+  })
+
+  it('renders the empty result copy as phase-wide, not period-specific', async () => {
+    const apiStore = useApiStore()
+    const nutrientStore = useNutrientStore()
+    nutrientStore.nutrients = [
+      { id: 'n1', name: 'Grow A' } as (typeof nutrientStore.nutrients)[number],
+    ]
+    vi.spyOn(apiStore.dosing, 'preview').mockResolvedValue({
+      mlByNutrientId: {},
+      totalMl: 0,
+      warnings: [],
+    })
+
+    const wrapper = mount(DosingCalculatorDialog, {
+      global: { stubs: primeVueStubs },
+      props: { growPhaseId: 'test-phase', modelValue: true },
+    })
+    await wrapper.get('[data-testid="calculate-dosing"]').trigger('click')
+
+    const resultsText = wrapper.get('[data-testid="dosing-results"]').text()
+    expect(resultsText).toMatch(/phase/i)
+    expect(resultsText).not.toMatch(/for this period/i)
   })
 })

@@ -30,6 +30,9 @@ const PhaseAutomationRulesDialog = defineAsyncComponent(
 const PhaseNutrientList = defineAsyncComponent(
   () => import('../../components/PhaseNutrientList.vue'),
 )
+const PhasePhBandEditor = defineAsyncComponent(
+  () => import('../../components/PhasePhBandEditor.vue'),
+)
 const DosingCalculatorDialog = defineAsyncComponent(
   () => import('../../components/DosingCalculatorDialog.vue'),
 )
@@ -133,6 +136,9 @@ function getDefaultPhases(): GrowPhase[] {
       localKey: genLocalKey('phase'),
       name: 'Germination',
       order: 1,
+      phMax: null,
+      phMin: null,
+      phTarget: null,
       startAt: null,
     },
     {
@@ -144,6 +150,9 @@ function getDefaultPhases(): GrowPhase[] {
       localKey: genLocalKey('phase'),
       name: 'Seedling',
       order: 2,
+      phMax: null,
+      phMin: null,
+      phTarget: null,
       startAt: null,
     },
     {
@@ -155,6 +164,9 @@ function getDefaultPhases(): GrowPhase[] {
       localKey: genLocalKey('phase'),
       name: 'Vegetative',
       order: 3,
+      phMax: null,
+      phMin: null,
+      phTarget: null,
       startAt: null,
     },
     {
@@ -166,6 +178,9 @@ function getDefaultPhases(): GrowPhase[] {
       localKey: genLocalKey('phase'),
       name: 'Flowering',
       order: 4,
+      phMax: null,
+      phMin: null,
+      phTarget: null,
       startAt: null,
     },
     {
@@ -177,6 +192,9 @@ function getDefaultPhases(): GrowPhase[] {
       localKey: genLocalKey('phase'),
       name: 'Flush',
       order: 5,
+      phMax: null,
+      phMin: null,
+      phTarget: null,
       startAt: null,
     },
   ]
@@ -244,6 +262,9 @@ const phaseDraft = ref<GrowPhase>({
   isActive: false,
   name: '',
   order: 0,
+  phMax: null,
+  phMin: null,
+  phTarget: null,
   startAt: null,
 })
 
@@ -327,6 +348,9 @@ function openAddPhase() {
     localKey: genLocalKey('phase'),
     name: '',
     order: sortedPhases.value.length + 1,
+    phMax: null,
+    phMin: null,
+    phTarget: null,
     startAt: null,
   }
   showPhaseModal.value = true
@@ -599,9 +623,6 @@ function emptyEnvPayload(): PhaseEnvironmentPayload {
     humidityMax: null,
     humidityMin: null,
     humidityTarget: null,
-    phMax: null,
-    phMin: null,
-    phTarget: null,
     tempMax: null,
     tempMin: null,
     tempTarget: null,
@@ -622,9 +643,6 @@ function envPayloadFromCache(env: PhaseEnvironment | null): PhaseEnvironmentPayl
     humidityMax: env?.humidityMax ?? null,
     humidityMin: env?.humidityMin ?? null,
     humidityTarget: env?.humidityTarget ?? null,
-    phMax: env?.phMax ?? null,
-    phMin: env?.phMin ?? null,
-    phTarget: env?.phTarget ?? null,
     tempMax: env?.tempMax ?? null,
     tempMin: env?.tempMin ?? null,
     tempTarget: env?.tempTarget ?? null,
@@ -640,14 +658,6 @@ async function openEnvDialog(phase: GrowPhase) {
     const cache = getEnvCache(phase)
     envDraftDay.value = envPayloadFromCache(cache.day)
     envDraftNight.value = envPayloadFromCache(cache.night)
-    // pH defaults from DAY: when NIGHT has no row yet but DAY is configured
-    // with pH values, seed the NIGHT pH inputs so the user only overrides
-    // what's actually different (temp/humidity/co2 stay null).
-    if (cache.night === null && cache.day !== null) {
-      envDraftNight.value.phMin = cache.day.phMin
-      envDraftNight.value.phTarget = cache.day.phTarget
-      envDraftNight.value.phMax = cache.day.phMax
-    }
   } finally {
     envDialogLoading.value = false
   }
@@ -1240,7 +1250,8 @@ function fmtTime(dayStartMinutes: number): string {
                 <div class="section-toolbar">
                   <h3 class="section-title">Nutrient Dosing per Phase</h3>
                   <span class="section-hint">
-                    Configure which nutrients to dose during DAY and NIGHT for each phase.
+                    Configure one shared nutrient mix and pH band per phase. The same values apply
+                    to both DAY and NIGHT.
                   </span>
                 </div>
 
@@ -1276,6 +1287,9 @@ function fmtTime(dayStartMinutes: number): string {
                         :disabled="!phase.id"
                         @click="openDosingCalculator(phase)"
                       />
+                    </div>
+                    <div class="nutrient-phase-ph">
+                      <PhasePhBandEditor :phase="phase" />
                     </div>
                   </div>
                 </div>
@@ -1593,55 +1607,11 @@ function fmtTime(dayStartMinutes: number): string {
                 </div>
               </div>
             </div>
-            <div class="env-form-fields">
-              <h6 class="env-form-subtitle">pH</h6>
-              <div class="field-row-3">
-                <div class="field">
-                  <label class="field-label">Min</label>
-                  <InputNumber
-                    v-model="envDraftFor(period).phMin"
-                    placeholder="e.g. 5.8"
-                    :min="0"
-                    :max="14"
-                    :step="0.01"
-                    :minFractionDigits="2"
-                    :maxFractionDigits="2"
-                  />
-                  <small class="field-micro-hint">Triggers BELOW_MIN rules</small>
-                </div>
-                <div class="field">
-                  <label class="field-label">Target</label>
-                  <InputNumber
-                    v-model="envDraftFor(period).phTarget"
-                    placeholder="e.g. 6.2"
-                    :min="0"
-                    :max="14"
-                    :step="0.01"
-                    :minFractionDigits="2"
-                    :maxFractionDigits="2"
-                  />
-                  <small class="field-micro-hint">Stored; not used by automation</small>
-                </div>
-                <div class="field">
-                  <label class="field-label">Max</label>
-                  <InputNumber
-                    v-model="envDraftFor(period).phMax"
-                    placeholder="e.g. 6.5"
-                    :min="0"
-                    :max="14"
-                    :step="0.01"
-                    :minFractionDigits="2"
-                    :maxFractionDigits="2"
-                  />
-                  <small class="field-micro-hint">Triggers ABOVE_MAX rules</small>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
         <p class="field-hint">
           Leave blank to leave a threshold unconstrained. Targets are stored but not yet used by
-          automation.
+          automation. pH bands are configured per phase on the Nutrient Dosing tab.
         </p>
       </div>
       <template #footer>
@@ -2026,5 +1996,12 @@ function fmtTime(dayStartMinutes: number): string {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+
+.nutrient-phase-ph {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
 }
 </style>
