@@ -1,4 +1,4 @@
-import { onBeforeUnmount, watch, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useConfirm } from 'primevue/useconfirm'
 
@@ -48,17 +48,21 @@ export function useUnsavedGuard(dirty: Ref<boolean>) {
     }
   }
 
-  watch(
-    dirty,
-    (isDirty) => {
-      if (isDirty) {
-        window.addEventListener('beforeunload', onBeforeUnload)
-      } else {
-        window.removeEventListener('beforeunload', onBeforeUnload)
-      }
-    },
-    { immediate: true },
-  )
+  // Defer the initial read of `dirty` to onMounted so callers don't have to
+  // declare every ref the dirtiness check depends on *before* this composable
+  // runs — `watch(..., { immediate: true })` would otherwise force a synchronous
+  // evaluation of `dirty.value` during setup, hitting a TDZ if any dependency
+  // is declared later (ControllerFormView bit this).
+  const syncBeforeUnload = (isDirty: boolean) => {
+    if (isDirty) {
+      window.addEventListener('beforeunload', onBeforeUnload)
+    } else {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
+  }
+
+  watch(dirty, syncBeforeUnload)
+  onMounted(() => syncBeforeUnload(dirty.value))
 
   onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', onBeforeUnload)

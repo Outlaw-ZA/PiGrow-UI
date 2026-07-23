@@ -75,18 +75,6 @@ const liveDevices = computed<Device[]>(
 
 const showWiring = ref(false)
 
-const isDirty = computed(
-  () =>
-    form.value.name !== initialForm.value.name ||
-    form.value.ipAddress !== initialForm.value.ipAddress ||
-    (isEditMode.value
-      ? form.value.macAddress !== initialForm.value.macAddress
-      : form.value.macAddress.trim().length > 0) ||
-    stagedSensors.value.length > 0 ||
-    stagedDevices.value.length > 0,
-)
-useUnsavedGuard(isDirty)
-
 // ---------- Sensors (unchanged from original) ----------
 
 type StagedSensor = SensorSeed & { localKey: string }
@@ -262,6 +250,18 @@ function confirmDeleteSensor(sensor: Sensor | StagedSensor) {
 type StagedDevice = DeviceSeed & { localKey: string }
 
 const stagedDevices = ref<StagedDevice[]>([])
+
+const isDirty = computed(
+  () =>
+    form.value.name !== initialForm.value.name ||
+    form.value.ipAddress !== initialForm.value.ipAddress ||
+    (isEditMode.value
+      ? form.value.macAddress !== initialForm.value.macAddress
+      : form.value.macAddress.trim().length > 0) ||
+    stagedSensors.value.length > 0 ||
+    stagedDevices.value.length > 0,
+)
+useUnsavedGuard(isDirty)
 
 const devices = computed<(Device | StagedDevice)[]>(() => {
   if (isEditMode.value) {
